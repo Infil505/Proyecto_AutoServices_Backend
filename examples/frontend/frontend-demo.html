@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoServices API - Ejemplo Frontend</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, select, button { padding: 8px; margin: 2px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .error { color: red; }
+        .success { color: green; }
+        .loading { color: orange; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .tab { display: none; }
+        .tab.active { display: block; }
+        .tabs { margin-bottom: 20px; }
+        .tab-button { padding: 10px 20px; background: #f0f0f0; border: none; cursor: pointer; }
+        .tab-button.active { background: #007bff; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AutoServices API - Demo Frontend</h1>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('auth')">Autenticación</button>
+            <button class="tab-button" onclick="showTab('users')">Usuarios</button>
+            <button class="tab-button" onclick="showTab('companies')">Compañías</button>
+            <button class="tab-button" onclick="showTab('technicians')">Técnicos</button>
+            <button class="tab-button" onclick="showTab('services')">Servicios</button>
+        </div>
+
+        <!-- Autenticación -->
+        <div id="auth" class="tab active">
+            <h2>Autenticación</h2>
+            <div id="auth-status">
+                <p class="error" id="auth-error"></p>
+                <p class="success" id="auth-success"></p>
+            </div>
+
+            <form id="login-form">
+                <h3>Iniciar Sesión</h3>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit">Iniciar Sesión</button>
+            </form>
+
+            <form id="register-form">
+                <h3>Registro</h3>
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" id="register-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono:</label>
+                    <input type="tel" id="register-phone" required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña:</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <div class="form-group">
+                    <label>Rol:</label>
+                    <select id="register-role">
+                        <option value="technician">Técnico</option>
+                        <option value="company">Compañía</option>
+                    </select>
+                </div>
+                <button type="submit">Registrarse</button>
+            </form>
+
+            <button onclick="logout()">Cerrar Sesión</button>
+        </div>
+
+        <!-- Usuarios -->
+        <div id="users" class="tab">
+            <h2>Gestión de Usuarios</h2>
+            <div id="users-status"></div>
+
+            <form id="create-user-form">
+                <h3>Crear Usuario</h3>
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" id="user-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="user-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono:</label>
+                    <input type="tel" id="user-phone" required>
+                </div>
+                <div class="form-group">
+                    <label>Rol:</label>
+                    <select id="user-role">
+                        <option value="technician">Técnico</option>
+                        <option value="company">Compañía</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+                </div>
+                <button type="submit">Crear Usuario</button>
+            </form>
+
+            <button onclick="loadUsers()">Cargar Usuarios</button>
+            <div id="users-list"></div>
+        </div>
+
+        <!-- Compañías -->
+        <div id="companies" class="tab">
+            <h2>Gestión de Compañías</h2>
+            <div id="companies-status"></div>
+
+            <form id="create-company-form">
+                <h3>Crear Compañía</h3>
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" id="company-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono:</label>
+                    <input type="tel" id="company-phone" required>
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="company-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Dirección:</label>
+                    <input type="text" id="company-address" required>
+                </div>
+                <button type="submit">Crear Compañía</button>
+            </form>
+
+            <button onclick="loadCompanies()">Cargar Compañías</button>
+            <div id="companies-list"></div>
+        </div>
+
+        <!-- Técnicos -->
+        <div id="technicians" class="tab">
+            <h2>Gestión de Técnicos</h2>
+            <div id="technicians-status"></div>
+
+            <form id="create-technician-form">
+                <h3>Crear Técnico</h3>
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" id="technician-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono:</label>
+                    <input type="tel" id="technician-phone" required>
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="technician-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Especialidad:</label>
+                    <input type="text" id="technician-specialty" placeholder="ej: Mecánica general">
+                </div>
+                <button type="submit">Crear Técnico</button>
+            </form>
+
+            <button onclick="loadTechnicians()">Cargar Técnicos</button>
+            <div id="technicians-list"></div>
+        </div>
+
+        <!-- Servicios -->
+        <div id="services" class="tab">
+            <h2>Gestión de Servicios</h2>
+            <div id="services-status"></div>
+
+            <form id="create-service-form">
+                <h3>Crear Servicio</h3>
+                <div class="form-group">
+                    <label>Nombre:</label>
+                    <input type="text" id="service-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Descripción:</label>
+                    <textarea id="service-description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Precio Base:</label>
+                    <input type="number" id="service-base-price" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Duración Estimada (minutos):</label>
+                    <input type="number" id="service-duration" required>
+                </div>
+                <button type="submit">Crear Servicio</button>
+            </form>
+
+            <button onclick="loadServices()">Cargar Servicios</button>
+            <div id="services-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL - cambiar según tu configuración
+        const API_BASE = 'http://localhost:3000';
+        let authToken = localStorage.getItem('authToken');
+
+        // Función para hacer requests a la API
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE}${endpoint}`;
+            const config = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers,
+                },
+                ...options,
+            };
+
+            if (authToken) {
+                config.headers.Authorization = `Bearer ${authToken}`;
+            }
+
+            try {
+                const response = await fetch(url, config);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // Funciones de autenticación
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await apiRequest('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ email, password }),
+                });
+
+                authToken = response.token;
+                localStorage.setItem('authToken', authToken);
+                document.getElementById('auth-success').textContent = 'Login exitoso!';
+                document.getElementById('auth-error').textContent = '';
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+                document.getElementById('auth-success').textContent = '';
+            }
+        });
+
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const phone = document.getElementById('register-phone').value;
+            const password = document.getElementById('register-password').value;
+            const role = document.getElementById('register-role').value;
+
+            try {
+                const response = await apiRequest('/api/auth/register', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, email, phone, password, role }),
+                });
+
+                authToken = response.token;
+                localStorage.setItem('authToken', authToken);
+                document.getElementById('auth-success').textContent = 'Registro exitoso!';
+                document.getElementById('auth-error').textContent = '';
+            } catch (error) {
+                document.getElementById('auth-error').textContent = error.message;
+                document.getElementById('auth-success').textContent = '';
+            }
+        });
+
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('authToken');
+            document.getElementById('auth-success').textContent = 'Sesión cerrada';
+            document.getElementById('auth-error').textContent = '';
+        }
+
+        // Funciones para usuarios
+        document.getElementById('create-user-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('user-name').value;
+            const email = document.getElementById('user-email').value;
+            const phone = document.getElementById('user-phone').value;
+            const role = document.getElementById('user-role').value;
+
+            try {
+                await apiRequest('/api/users', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, email, phone, role }),
+                });
+                document.getElementById('users-status').innerHTML = '<p class="success">Usuario creado exitosamente!</p>';
+                loadUsers();
+            } catch (error) {
+                document.getElementById('users-status').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+
+        async function loadUsers() {
+            try {
+                const response = await apiRequest('/api/users?page=1&limit=10');
+                const users = response.data;
+
+                let html = '<table><thead><tr><th>ID</th><th>Nombre</th><th>Email</th><th>Rol</th></tr></thead><tbody>';
+                users.forEach(user => {
+                    html += `<tr><td>${user.id}</td><td>${user.name}</td><td>${user.email}</td><td>${user.role}</td></tr>`;
+                });
+                html += '</tbody></table>';
+
+                document.getElementById('users-list').innerHTML = html;
+                document.getElementById('users-status').innerHTML = `<p>Total: ${response.total} usuarios</p>`;
+            } catch (error) {
+                document.getElementById('users-status').innerHTML = `<p class="error">Error cargando usuarios: ${error.message}</p>`;
+            }
+        }
+
+        // Funciones para compañías
+        document.getElementById('create-company-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('company-name').value;
+            const phone = document.getElementById('company-phone').value;
+            const email = document.getElementById('company-email').value;
+            const address = document.getElementById('company-address').value;
+
+            try {
+                await apiRequest('/api/companies', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, phone, email, address }),
+                });
+                document.getElementById('companies-status').innerHTML = '<p class="success">Compañía creada exitosamente!</p>';
+                loadCompanies();
+            } catch (error) {
+                document.getElementById('companies-status').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+
+        async function loadCompanies() {
+            try {
+                const response = await apiRequest('/api/companies?page=1&limit=10');
+                const companies = response.data;
+
+                let html = '<table><thead><tr><th>Teléfono</th><th>Nombre</th><th>Email</th><th>Dirección</th></tr></thead><tbody>';
+                companies.forEach(company => {
+                    html += `<tr><td>${company.phone}</td><td>${company.name}</td><td>${company.email}</td><td>${company.address}</td></tr>`;
+                });
+                html += '</tbody></table>';
+
+                document.getElementById('companies-list').innerHTML = html;
+                document.getElementById('companies-status').innerHTML = `<p>Total: ${response.total} compañías</p>`;
+            } catch (error) {
+                document.getElementById('companies-status').innerHTML = `<p class="error">Error cargando compañías: ${error.message}</p>`;
+            }
+        }
+
+        // Funciones para técnicos
+        document.getElementById('create-technician-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('technician-name').value;
+            const phone = document.getElementById('technician-phone').value;
+            const email = document.getElementById('technician-email').value;
+            const specialty = document.getElementById('technician-specialty').value;
+
+            try {
+                await apiRequest('/api/technicians', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, phone, email, specialty }),
+                });
+                document.getElementById('technicians-status').innerHTML = '<p class="success">Técnico creado exitosamente!</p>';
+                loadTechnicians();
+            } catch (error) {
+                document.getElementById('technicians-status').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+
+        async function loadTechnicians() {
+            try {
+                const response = await apiRequest('/api/technicians?page=1&limit=10');
+                const technicians = response.data;
+
+                let html = '<table><thead><tr><th>Teléfono</th><th>Nombre</th><th>Email</th><th>Especialidad</th></tr></thead><tbody>';
+                technicians.forEach(technician => {
+                    html += `<tr><td>${technician.phone}</td><td>${technician.name}</td><td>${technician.email}</td><td>${technician.specialty || 'N/A'}</td></tr>`;
+                });
+                html += '</tbody></table>';
+
+                document.getElementById('technicians-list').innerHTML = html;
+                document.getElementById('technicians-status').innerHTML = `<p>Total: ${response.total} técnicos</p>`;
+            } catch (error) {
+                document.getElementById('technicians-status').innerHTML = `<p class="error">Error cargando técnicos: ${error.message}</p>`;
+            }
+        }
+
+        // Funciones para servicios
+        document.getElementById('create-service-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('service-name').value;
+            const description = document.getElementById('service-description').value;
+            const basePrice = parseFloat(document.getElementById('service-base-price').value);
+            const duration = parseInt(document.getElementById('service-duration').value);
+
+            try {
+                await apiRequest('/api/services', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, description, basePrice, duration }),
+                });
+                document.getElementById('services-status').innerHTML = '<p class="success">Servicio creado exitosamente!</p>';
+                loadServices();
+            } catch (error) {
+                document.getElementById('services-status').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+
+        async function loadServices() {
+            try {
+                const response = await apiRequest('/api/services?page=1&limit=10');
+                const services = response.data;
+
+                let html = '<table><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Precio Base</th><th>Duración</th></tr></thead><tbody>';
+                services.forEach(service => {
+                    html += `<tr><td>${service.id}</td><td>${service.name}</td><td>${service.description}</td><td>$${service.basePrice}</td><td>${service.duration} min</td></tr>`;
+                });
+                html += '</tbody></table>';
+
+                document.getElementById('services-list').innerHTML = html;
+                document.getElementById('services-status').innerHTML = `<p>Total: ${response.total} servicios</p>`;
+            } catch (error) {
+                document.getElementById('services-status').innerHTML = `<p class="error">Error cargando servicios: ${error.message}</p>`;
+            }
+        }
+
+        // Función para cambiar entre pestañas
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            // Mostrar la pestaña seleccionada
+            document.getElementById(tabName).classList.add('active');
+
+            // Actualizar botones de pestañas
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => button.classList.remove('active'));
+
+            event.target.classList.add('active');
+        }
+
+        // Verificar estado de autenticación al cargar
+        if (authToken) {
+            document.getElementById('auth-success').textContent = 'Sesión activa';
+        }
+    </script>
+</body>
+</html>

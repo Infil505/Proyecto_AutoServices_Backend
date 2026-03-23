@@ -1,0 +1,6 @@
+[install]
+# Use node_modules directory that was installed by npm
+optional = true
+
+[bundle]
+target = "node"
