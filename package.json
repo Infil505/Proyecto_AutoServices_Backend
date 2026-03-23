@@ -31,7 +31,7 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "compression": "^1.8.1",
-    "drizzle-kit": "^1.0.0-beta.9-e89174b",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.1",
     "helmet": "^7.2.0",
     "hono": "^4.12.8",

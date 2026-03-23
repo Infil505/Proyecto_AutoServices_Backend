@@ -3,5 +3,8 @@ export * from './company';
 export * from './coverageZone';
 export * from './customer';
 export * from './service';
+export * from './serviceSpecialty';
+export * from './specialty';
 export * from './technician';
+export * from './technicianSpecialty';
 export * from './user';

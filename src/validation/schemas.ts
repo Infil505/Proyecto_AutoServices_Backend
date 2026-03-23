@@ -29,7 +29,6 @@ export const technicianSchema = z.object({
   companyPhone: z.string().min(10).max(15),
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
-  specialty: z.string().max(100).optional(),
   available: z.boolean().optional()
 });
 
@@ -96,4 +95,23 @@ export const serviceFilterSchema = z.object({
   category: z.string().optional(),
   companyPhone: z.string().optional(),
   active: z.boolean().optional()
+});
+
+// Specialty validation schemas
+export const specialtySchema = z.object({
+  name: z.string().min(2).max(100),
+  description: z.string().max(500).optional(),
+  active: z.boolean().optional()
+});
+
+// Service specialty validation schemas
+export const serviceSpecialtySchema = z.object({
+  serviceId: z.number().int().positive(),
+  specialtyId: z.number().int().positive()
+});
+
+// Technician specialty validation schemas
+export const technicianSpecialtySchema = z.object({
+  technicianPhone: z.string().min(10).max(15),
+  specialtyId: z.number().int().positive()
 });

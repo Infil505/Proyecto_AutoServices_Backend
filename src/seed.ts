@@ -44,7 +44,6 @@ async function seed() {
       companyPhone: '+1234567890',
       name: 'Jane Smith',
       email: 'jane@autoservicespro.com',
-      specialty: 'Engine Repair',
       available: true,
     },
   ]);

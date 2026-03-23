@@ -1,4 +1,4 @@
-import { boolean, date, integer, jsonb, pgTable, serial, text, time, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, date, integer, jsonb, pgTable, serial, text, time, timestamp, bigserial, primaryKey } from 'drizzle-orm/pg-core';
 
 export const companies = pgTable('companies', {
   phone: text('phone').primaryKey(),
@@ -28,10 +28,31 @@ export const technicians = pgTable('technicians', {
   companyPhone: text('company_phone').notNull().references(() => companies.phone),
   name: text('name').notNull(),
   email: text('email'),
-  specialty: text('specialty'),
   available: boolean('available').default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
+
+export const specialties = pgTable('specialties', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+export const serviceSpecialties = pgTable('service_specialties', {
+  serviceId: bigserial('service_id', { mode: 'number' }).notNull().references(() => services.id),
+  specialtyId: bigserial('specialty_id', { mode: 'number' }).notNull().references(() => specialties.id),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.serviceId, table.specialtyId] }),
+}));
+
+export const technicianSpecialties = pgTable('technician_specialties', {
+  technicianPhone: text('technician_phone').notNull().references(() => technicians.phone),
+  specialtyId: bigserial('specialty_id', { mode: 'number' }).notNull().references(() => specialties.id),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.technicianPhone, table.specialtyId] }),
+}));
 
 export const services = pgTable('services', {
   id: serial('id').primaryKey(),

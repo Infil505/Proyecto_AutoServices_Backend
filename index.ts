@@ -7,7 +7,10 @@ import companyRoutes from "./src/routes/companyRoutes.js";
 import coverageZoneRoutes from "./src/routes/coverageZoneRoutes.js";
 import customerRoutes from "./src/routes/customerRoutes.js";
 import serviceRoutes from "./src/routes/serviceRoutes.js";
+import serviceSpecialtyRoutes from "./src/routes/serviceSpecialtyRoutes.js";
+import specialtyRoutes from "./src/routes/specialtyRoutes.js";
 import technicianRoutes from "./src/routes/technicianRoutes.js";
+import technicianSpecialtyRoutes from "./src/routes/technicianSpecialtyRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import type { AppContext } from "./src/types.js";
 
@@ -65,7 +68,10 @@ app.use("/api/appointments/*", jwtProtect);
 app.use("/api/companies/*", jwtProtect);
 app.use("/api/customers/*", jwtProtect);
 app.use("/api/services/*", jwtProtect);
+app.use("/api/service-specialties/*", jwtProtect);
+app.use("/api/specialties/*", jwtProtect);
 app.use("/api/technicians/*", jwtProtect);
+app.use("/api/technician-specialties/*", jwtProtect);
 app.use("/api/coverage-zones/*", jwtProtect);
 app.use("/api/users/*", jwtProtect);
 
@@ -74,7 +80,10 @@ app.route("/api/appointments", appointmentRoutes);
 app.route("/api/companies", companyRoutes);
 app.route("/api/customers", customerRoutes);
 app.route("/api/services", serviceRoutes);
+app.route("/api/service-specialties", serviceSpecialtyRoutes);
+app.route("/api/specialties", specialtyRoutes);
 app.route("/api/technicians", technicianRoutes);
+app.route("/api/technician-specialties", technicianSpecialtyRoutes);
 app.route("/api/coverage-zones", coverageZoneRoutes);
 app.route("/api/users", userRoutes);
 
