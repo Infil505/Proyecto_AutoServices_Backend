@@ -19,24 +19,25 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.19.37",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "eslint": "^8.57.1",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "drizzle-kit": "^0.31.9",
+    "compression": "^1.8.1",
+    "drizzle-kit": "^1.0.0-beta.9-e89174b",
     "drizzle-orm": "^0.45.1",
-    "hono": "^4.12.5",
+    "helmet": "^7.2.0",
+    "hono": "^4.12.8",
     "postgres": "^3.4.8",
-    "zod": "^3.22.0",
-    "winston": "^3.11.0",
-    "helmet": "^7.1.0",
-    "compression": "^1.7.4"
+    "swagger-ui": "^5.32.1",
+    "winston": "^3.19.0",
+    "zod": "^3.25.76"
   }
 }

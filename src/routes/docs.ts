@@ -175,7 +175,7 @@ swaggerApp.use('/docs', swaggerUI({
   url: '/openapi.json'
 }));
 
-swaggerApp.get('/openapi.json', (c) => {
+swaggerApp.get('/openapi.json', (c: { json: (arg0: any) => any; }) => {
   return c.json(apiDoc.openAPIRegistry.generateDocument({
     openapi: '3.0.0',
     info: {
