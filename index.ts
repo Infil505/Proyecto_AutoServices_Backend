@@ -13,8 +13,12 @@ import technicianRoutes from "./src/routes/technicianRoutes.js";
 import technicianSpecialtyRoutes from "./src/routes/technicianSpecialtyRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import type { AppContext } from "./src/types.js";
+import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 
 const app = new Hono<AppContext>();
+
+// Start badge websocket feed for appointments (pub/sub)
+startAppointmentWebsocket();
 
 // JWT verification middleware
 function jwtMiddleware(secret: string) {
@@ -258,6 +262,20 @@ app.get("/docs", (c) => {
           
           <!-- APPOINTMENTS -->
           <h3> Appointments</h3>
+          <div class="endpoint">
+            <h4><span class="method get">GET</span><span class="path">/ws/appointments</span></h4>
+            <p>WebSocket endpoint for real-time appointment events</p>
+            <div class="response-section">
+              <strong>Connect via:</strong>
+              <pre>const socket = new WebSocket('ws://localhost:3001');</pre>
+              <p>Events emitted:</p>
+              <ul>
+                <li><code>appointment:created</code></li>
+                <li><code>appointment:updated</code></li>
+                <li><code>appointment:deleted</code></li>
+              </ul>
+            </div>
+          </div>
           
           <div class="endpoint">
             <h4><span class="method get">GET</span><span class="path">/api/appointments</span></h4>

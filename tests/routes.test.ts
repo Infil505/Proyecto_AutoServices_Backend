@@ -38,6 +38,31 @@ describe('Auth Routes', () => {
   });
 });
 
+describe('Appointment Service Events', () => {
+  it('should emit events for appointment operations', async () => {
+    const events = [];
+    const onCreated = (appointment: any) => events.push({ event: 'created', appointment });
+    const onUpdated = (appointment: any) => events.push({ event: 'updated', appointment });
+    const onDeleted = (payload: any) => events.push({ event: 'deleted', payload });
+
+    const { AppointmentService } = await import('../src/services/appointmentService');
+
+    AppointmentService.events.on('appointment:created', onCreated);
+    AppointmentService.events.on('appointment:updated', onUpdated);
+    AppointmentService.events.on('appointment:deleted', onDeleted);
+
+    AppointmentService.events.emit('appointment:created', { id: 1, status: 'scheduled' });
+    AppointmentService.events.emit('appointment:updated', { id: 1, status: 'done' });
+    AppointmentService.events.emit('appointment:deleted', { id: 1 });
+
+    expect(events).toEqual([
+      { event: 'created', appointment: { id: 1, status: 'scheduled' } },
+      { event: 'updated', appointment: { id: 1, status: 'done' } },
+      { event: 'deleted', payload: { id: 1 } },
+    ]);
+  });
+});
+
 describe('Health Check', () => {
   it('should return OK status', async () => {
     const app = new Hono();
