@@ -10,7 +10,7 @@ describe('Auth Routes', () => {
   app.route('/api/auth', authRoutes);
 
   it('should return 400 for invalid registration data', async () => {
-    const client = testClient(app);
+    const client = testClient(app) as any;
     const res = await client.api.auth.register.$post({
       json: {
         type: 'invalid_type',
@@ -26,7 +26,7 @@ describe('Auth Routes', () => {
   });
 
   it('should return 400 for missing required fields', async () => {
-    const client = testClient(app);
+    const client = testClient(app) as any;
     const res = await client.api.auth.register.$post({
       json: {
         type: 'technician'
@@ -40,10 +40,18 @@ describe('Auth Routes', () => {
 
 describe('Appointment Service Events', () => {
   it('should emit events for appointment operations', async () => {
-    const events = [];
-    const onCreated = (appointment: any) => events.push({ event: 'created', appointment });
-    const onUpdated = (appointment: any) => events.push({ event: 'updated', appointment });
-    const onDeleted = (payload: any) => events.push({ event: 'deleted', payload });
+    type AppointmentEvents =
+      | { event: 'created'; appointment: { id: number; status: string } }
+      | { event: 'updated'; appointment: { id: number; status: string } }
+      | { event: 'deleted'; payload: { id: number } };
+
+    const events: AppointmentEvents[] = [];
+    const onCreated = (appointment: { id: number; status: string }) =>
+      events.push({ event: 'created', appointment });
+    const onUpdated = (appointment: { id: number; status: string }) =>
+      events.push({ event: 'updated', appointment });
+    const onDeleted = (payload: { id: number }) =>
+      events.push({ event: 'deleted', payload });
 
     const { AppointmentService } = await import('../src/services/appointmentService');
 
@@ -68,7 +76,7 @@ describe('Health Check', () => {
     const app = new Hono();
     app.get('/health', (c) => c.json({ status: 'OK' }));
 
-    const client = testClient(app);
+    const client = testClient(app) as any;
     const res = await client.health.$get();
 
     expect(res.status).toBe(200);
