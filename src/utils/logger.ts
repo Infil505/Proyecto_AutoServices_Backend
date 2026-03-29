@@ -29,7 +29,7 @@ winston.addColors(colors);
 
 // Define format for logs
 const format = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
   winston.format.colorize({ all: true }),
   winston.format.printf(
     (info) => `${info.timestamp} ${info.level}: ${info.message}`,
@@ -58,8 +58,10 @@ const logger = winston.createLogger({
 import { mkdirSync } from 'fs';
 try {
   mkdirSync('logs');
-} catch (error) {
-  // Directory already exists
+} catch (error: any) {
+  if (error.code !== 'EEXIST') {
+    console.error('Failed to create logs directory:', error.message);
+  }
 }
 
 export default logger;

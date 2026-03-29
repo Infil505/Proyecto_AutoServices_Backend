@@ -7,6 +7,10 @@ export class ServiceService {
     return await db.select().from(services);
   }
 
+  static async getByCompany(companyPhone: string) {
+    return await db.select().from(services).where(eq(services.companyPhone, companyPhone));
+  }
+
   static async getById(id: number) {
     const result = await db.select().from(services).where(eq(services.id, id));
     return result[0];

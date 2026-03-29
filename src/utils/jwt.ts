@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 export function createJWT(payload: object, secret: string): string {
   const header = JSON.stringify({ alg: 'HS256', typ: 'JWT' });
@@ -20,7 +20,9 @@ export function verifyJWT(token: string, secret: string): Record<string, unknown
       .update(`${encodedHeader}.${encodedPayload}`)
       .digest('base64url');
 
-    if (signature !== expected) return null;
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
 
     const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString()) as Record<string, unknown>;
     if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) return null;

@@ -60,32 +60,3 @@ export const parseSearchFilters = (c: any): SearchOptions => {
   return { search, filters };
 };
 
-// Build SQL WHERE clause for search
-export const buildSearchWhereClause = (searchFields: string[], searchTerm?: string) => {
-  if (!searchTerm || !searchFields.length) return '';
-
-  const conditions = searchFields.map(field =>
-    `${field} ILIKE '%${searchTerm.replace(/'/g, "''")}%'`
-  );
-
-  return `(${conditions.join(' OR ')})`;
-};
-
-// Build SQL WHERE clause for filters
-export const buildFilterWhereClause = (filters: Record<string, any>) => {
-  const conditions: string[] = [];
-
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && value !== '') {
-      if (typeof value === 'boolean') {
-        conditions.push(`${key} = ${value}`);
-      } else if (typeof value === 'number') {
-        conditions.push(`${key} = ${value}`);
-      } else {
-        conditions.push(`${key} = '${value.toString().replace(/'/g, "''")}'`);
-      }
-    }
-  }
-
-  return conditions.join(' AND ');
-};

@@ -6,22 +6,11 @@ const router = new Hono<AppContext>();
 
 router.get('/', async (c) => {
   const payload = c.var.user!;
-  let users;
-  if (payload.type === 'technician') {
-    // Technicians can only see themselves
-    users = await UserService.getAll().then(all => 
-      all.filter(u => u.phone === payload.phone && u.type === 'technician')
-    );
-  } else if (payload.type === 'company') {
-    // Companies can see users from their business
-    users = await UserService.getAll().then(all => 
-      all.filter(u => u.phone === payload.phone)
-    );
-  } else {
-    // super_admin sees all
-    users = await UserService.getAll();
+  if (payload.type === 'technician' || payload.type === 'company') {
+    const user = await UserService.getByPhone(payload.phone);
+    return c.json(user ? [user] : []);
   }
-  return c.json(users);
+  return c.json(await UserService.getAll());
 });
 
 router.get('/:id', async (c) => {

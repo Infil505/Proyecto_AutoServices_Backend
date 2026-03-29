@@ -1,4 +1,6 @@
+import { timingSafeEqual } from "crypto";
 import { Hono } from "hono";
+import logger from "./src/utils/logger.js";
 import { cors } from "hono/cors";
 import { config } from "./src/config/index.js";
 import { rateLimit } from "./src/middleware/validation.js";
@@ -26,10 +28,10 @@ startAppointmentWebsocket();
 function jwtMiddleware(secret: string) {
   return async (c: any, next: any) => {
     const authHeader = c.req.header("Authorization");
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "Missing authorization header" }, 401);
     }
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.substring(7);
     const payload = verifyJWT(token, secret);
     if (!payload) {
       return c.json({ error: "Invalid token" }, 401);
@@ -38,6 +40,14 @@ function jwtMiddleware(secret: string) {
     await next();
   };
 }
+
+// Request logging
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  await next();
+  const ms = Date.now() - start;
+  logger.http(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+});
 
 // CORS middleware
 app.use("*", cors({ origin: config.corsOrigins }));
@@ -78,18 +88,49 @@ app.get("/health", (c) =>
   c.json({ status: "OK", timestamp: new Date().toISOString() }),
 );
 
-// Emergency shutdown
+// Emergency shutdown — independent credentials, rate limited, audited
+const shutdownAttempts = new Map<string, { count: number; resetAt: number }>();
+
 app.post("/health/shutdown", async (c) => {
+  const ip =
+    c.req.header("CF-Connecting-IP") ||
+    c.req.header("X-Forwarded-For")?.split(",")[0].trim() ||
+    c.req.header("X-Real-IP") ||
+    "unknown";
+
+  // 5 attempts per 15 minutes per IP
+  const now = Date.now();
+  const window = 15 * 60 * 1000;
+  const entry = shutdownAttempts.get(ip);
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= 5) {
+      console.warn(`[SHUTDOWN] Rate limited: ${ip} at ${new Date().toISOString()}`);
+      return c.json({ error: "Too many attempts" }, 429);
+    }
+    entry.count++;
+  } else {
+    shutdownAttempts.set(ip, { count: 1, resetAt: now + window });
+  }
+
   const body = await c.req.json().catch(() => null);
-  if (
-    !body ||
-    body.user !== config.shutdownUser ||
-    body.password !== config.shutdownPassword
-  ) {
+  const userMatch = body?.user === config.shutdownUser;
+  let passMatch = false;
+  if (body?.password) {
+    try {
+      const a = Buffer.from(String(body.password));
+      const b = Buffer.from(config.shutdownPassword);
+      passMatch = a.length === b.length && timingSafeEqual(a, b);
+    } catch {
+      passMatch = false;
+    }
+  }
+
+  if (!userMatch || !passMatch) {
+    console.warn(`[SHUTDOWN] Failed attempt from ${ip} at ${new Date().toISOString()}`);
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  console.warn(`[SHUTDOWN] Emergency shutdown triggered at ${new Date().toISOString()}`);
+  console.warn(`[SHUTDOWN] Emergency shutdown triggered from ${ip} at ${new Date().toISOString()}`);
   setTimeout(() => process.exit(0), 300);
   return c.json({ message: "Shutting down" }, 200);
 });
@@ -797,7 +838,7 @@ app.get("/", (c) =>
 
 // Global error handler
 app.onError((err, c) => {
-  console.error(`${err}`);
+  logger.error(`${c.req.method} ${c.req.path} — ${err.message}\n${err.stack}`);
   return c.json({ error: "Internal Server Error" }, 500);
 });
 

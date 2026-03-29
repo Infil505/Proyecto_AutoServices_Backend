@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { CompanyService } from '../services/companyService.js';
 import type { AppContext } from '../types.js';
+import { companySchema } from '../validation/schemas.js';
 
 const router = new Hono<AppContext>();
 
@@ -36,32 +37,50 @@ router.get('/:phone', async (c) => {
 });
 
 router.post('/', async (c) => {
-  const data = await c.req.json();
   const payload = c.var.user!;
-  
-  // Only super_admins can create companies
+
   if (payload.type !== 'super_admin') {
     return c.json({ error: 'Only super_admins can create companies' }, 403);
   }
-  
-  const company = await CompanyService.create(data);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = companySchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const company = await CompanyService.create(result.data);
   return c.json(company, 201);
 });
 
 router.put('/:phone', async (c) => {
   const phone = c.req.param('phone');
-  const data = await c.req.json();
   const payload = c.var.user!;
   
-  // Companies can update their own, super_admins can update any
-  if (payload.type === 'company' && payload.phone !== phone) {
-    return c.json({ error: 'Can only update own company' }, 403);
-  }
   if (payload.type === 'technician') {
     return c.json({ error: 'Unauthorized' }, 403);
   }
-  
-  const company = await CompanyService.update(phone, data);
+  if (payload.type === 'company' && payload.phone !== phone) {
+    return c.json({ error: 'Can only update own company' }, 403);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = companySchema.partial().safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const company = await CompanyService.update(phone, result.data);
   return c.json(company);
 });
 

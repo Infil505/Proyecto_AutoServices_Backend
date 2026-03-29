@@ -7,6 +7,10 @@ export class CoverageZoneService {
     return await db.select().from(coverageZones);
   }
 
+  static async getByCompany(companyPhone: string) {
+    return await db.select().from(coverageZones).where(eq(coverageZones.companyPhone, companyPhone));
+  }
+
   static async getById(id: number) {
     const result = await db.select().from(coverageZones).where(eq(coverageZones.id, id));
     return result[0];

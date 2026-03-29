@@ -1,27 +1,21 @@
 import { Hono } from 'hono';
 import { ServiceService } from '../services/serviceService.js';
 import type { AppContext } from '../types.js';
+import { serviceSchema } from '../validation/schemas.js';
 
 const router = new Hono<AppContext>();
 
 router.get('/', async (c) => {
   const payload = c.var.user!;
-  let services;
   if (payload.type === 'technician') {
-    // Technicians can only see services from their company
-    services = await ServiceService.getAll().then(all => 
-      all.filter(s => s.companyPhone === payload.phone)
-    );
-  } else if (payload.type === 'company') {
-    // Companies can see their services
-    services = await ServiceService.getAll().then(all => 
-      all.filter(s => s.companyPhone === payload.phone)
-    );
-  } else {
-    // super_admin sees all
-    services = await ServiceService.getAll();
+    const companyPhone = payload.companyPhone;
+    if (!companyPhone) return c.json([]);
+    return c.json(await ServiceService.getByCompany(companyPhone));
   }
-  return c.json(services);
+  if (payload.type === 'company') {
+    return c.json(await ServiceService.getByCompany(payload.phone));
+  }
+  return c.json(await ServiceService.getAll());
 });
 
 router.get('/:id', async (c) => {
@@ -30,8 +24,11 @@ router.get('/:id', async (c) => {
   const service = await ServiceService.getById(id);
   if (!service) return c.json({ error: 'Not found' }, 404);
   
-  // Check company access - technicians and companies can only see their company's services
-  if ((payload.type === 'technician' || payload.type === 'company') && service.companyPhone !== payload.phone) {
+  // Check company access
+  if (payload.type === 'company' && service.companyPhone !== payload.phone) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+  if (payload.type === 'technician' && service.companyPhone !== payload.companyPhone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
   
@@ -39,34 +36,53 @@ router.get('/:id', async (c) => {
 });
 
 router.post('/', async (c) => {
-  const data = await c.req.json();
   const payload = c.var.user!;
-  
-  // Companies can create services, super_admins can create any
+
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
     return c.json({ error: 'Only companies and super_admins can create services' }, 403);
   }
-  
-  const service = await ServiceService.create(data);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = serviceSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const service = await ServiceService.create(result.data);
   return c.json(service, 201);
 });
 
 router.put('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
   const payload = c.var.user!;
-  
-  // Companies can update their services, super_admins can update any
+
+  if (payload.type === 'technician') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
   if (payload.type === 'company') {
     const service = await ServiceService.getById(id);
     if (!service || service.companyPhone !== payload.phone) {
       return c.json({ error: 'Can only update own services' }, 403);
     }
-  } else if (payload.type === 'technician') {
-    return c.json({ error: 'Unauthorized' }, 403);
   }
-  
-  const service = await ServiceService.update(id, data);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = serviceSchema.partial().safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const service = await ServiceService.update(id, result.data);
   return c.json(service);
 });
 

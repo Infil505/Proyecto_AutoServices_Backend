@@ -26,7 +26,7 @@ const getConfig = (): Config => {
   const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes
   const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
   const shutdownUser = process.env.SHUTDOWN_USER || 'admin_shutdown';
-  const shutdownPassword = process.env.SHUTDOWN_PASSWORD || '';
+  const shutdownPassword = process.env.SHUTDOWN_PASSWORD || 'change_this_password';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -35,6 +35,9 @@ const getConfig = (): Config => {
     }
     if (!jwtSecret || jwtSecret === 'default-secret-change-in-production') {
       throw new Error('JWT_SECRET environment variable must be set and not use default value');
+    }
+    if (!process.env.SHUTDOWN_PASSWORD || process.env.SHUTDOWN_PASSWORD === 'change_this_password') {
+      throw new Error('SHUTDOWN_PASSWORD environment variable must be set and not use default value');
     }
   }
 
