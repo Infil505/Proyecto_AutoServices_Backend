@@ -10,6 +10,8 @@ interface Config {
   rateLimitMax: number;
   rateLimitWindowMs: number;
   bcryptRounds: number;
+  shutdownUser: string;
+  shutdownPassword: string;
 }
 
 const getConfig = (): Config => {
@@ -23,6 +25,8 @@ const getConfig = (): Config => {
   const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
   const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes
   const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+  const shutdownUser = process.env.SHUTDOWN_USER || 'admin_shutdown';
+  const shutdownPassword = process.env.SHUTDOWN_PASSWORD || '';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -45,6 +49,8 @@ const getConfig = (): Config => {
     rateLimitMax,
     rateLimitWindowMs,
     bcryptRounds,
+    shutdownUser,
+    shutdownPassword,
   };
 };
 

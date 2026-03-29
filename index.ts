@@ -78,6 +78,22 @@ app.get("/health", (c) =>
   c.json({ status: "OK", timestamp: new Date().toISOString() }),
 );
 
+// Emergency shutdown
+app.post("/health/shutdown", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (
+    !body ||
+    body.user !== config.shutdownUser ||
+    body.password !== config.shutdownPassword
+  ) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  console.warn(`[SHUTDOWN] Emergency shutdown triggered at ${new Date().toISOString()}`);
+  setTimeout(() => process.exit(0), 300);
+  return c.json({ message: "Shutting down" }, 200);
+});
+
 // API Documentation endpoint
 app.get("/docs", (c) => {
   const html = `
