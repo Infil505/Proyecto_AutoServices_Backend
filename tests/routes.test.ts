@@ -7,11 +7,11 @@ import authRoutes from '../src/routes/authRoutes';
 
 describe('Auth Routes', () => {
   const app = new Hono();
-  app.route('/api/auth', authRoutes);
+  app.route('/api/v1/auth', authRoutes);
 
   it('should return 400 for invalid company registration data', async () => {
     const client = testClient(app) as any;
-    const res = await client.api.auth['register']['company'].$post({
+    const res = await client.api.v1.auth['register']['company'].$post({
       json: {
         phone: '123', // too short / wrong format
         name: '',
@@ -26,7 +26,7 @@ describe('Auth Routes', () => {
 
   it('should return 400 for missing required fields on company registration', async () => {
     const client = testClient(app) as any;
-    const res = await client.api.auth['register']['company'].$post({
+    const res = await client.api.v1.auth['register']['company'].$post({
       json: {
         // missing phone, name, password
       }

@@ -14,7 +14,7 @@ function createTestApp(userType: 'technician' | 'company' | 'super_admin', phone
     c.set('user', { id: 1, type: userType, phone, iat: 0, exp: 9_999_999_999 });
     await next();
   });
-  app.route('/api/appointments', appointmentRoutes);
+  app.route('/api/v1/appointments', appointmentRoutes);
   return app;
 }
 
@@ -27,17 +27,17 @@ describe('Appointments RBAC — technician', () => {
   const client = testClient(app) as any;
 
   it('POST returns 403', async () => {
-    const res = await client.api.appointments.$post({ json: {} });
+    const res = await client.api.v1.appointments.$post({ json: {} });
     expect(res.status).toBe(403);
   });
 
   it('PUT returns 403', async () => {
-    const res = await client.api.appointments[':id'].$put({ param: { id: '1' }, json: {} });
+    const res = await client.api.v1.appointments[':id'].$put({ param: { id: '1' }, json: {} });
     expect(res.status).toBe(403);
   });
 
   it('DELETE returns 403', async () => {
-    const res = await client.api.appointments[':id'].$delete({ param: { id: '1' } });
+    const res = await client.api.v1.appointments[':id'].$delete({ param: { id: '1' } });
     expect(res.status).toBe(403);
   });
 });
@@ -50,7 +50,7 @@ describe('Appointments validation (company user)', () => {
   const client = testClient(app) as any;
 
   it('POST with empty body returns 400 with Zod details', async () => {
-    const res = await client.api.appointments.$post({ json: {} });
+    const res = await client.api.v1.appointments.$post({ json: {} });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('Validation failed');
@@ -61,7 +61,7 @@ describe('Appointments validation (company user)', () => {
   });
 
   it('POST with invalid phone format returns 400', async () => {
-    const res = await client.api.appointments.$post({
+    const res = await client.api.v1.appointments.$post({
       json: { companyPhone: '123', serviceId: 1 }
     });
     expect(res.status).toBe(400);
@@ -70,21 +70,21 @@ describe('Appointments validation (company user)', () => {
   });
 
   it('POST with invalid appointmentDate format returns 400', async () => {
-    const res = await client.api.appointments.$post({
+    const res = await client.api.v1.appointments.$post({
       json: { companyPhone: '+1234567890', appointmentDate: 'not-a-date' }
     });
     expect(res.status).toBe(400);
   });
 
   it('POST with invalid status returns 400', async () => {
-    const res = await client.api.appointments.$post({
+    const res = await client.api.v1.appointments.$post({
       json: { companyPhone: '+1234567890', status: 'flying' }
     });
     expect(res.status).toBe(400);
   });
 
   it('PUT with invalid field returns 400', async () => {
-    const res = await client.api.appointments[':id'].$put({
+    const res = await client.api.v1.appointments[':id'].$put({
       param: { id: '1' },
       json: { startTime: 'not-a-time' }
     });
@@ -101,7 +101,7 @@ describe('Appointments RBAC — super_admin passes auth check', () => {
   const client = testClient(app) as any;
 
   it('POST with invalid body returns 400 (not 403)', async () => {
-    const res = await client.api.appointments.$post({ json: {} });
+    const res = await client.api.v1.appointments.$post({ json: {} });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('Validation failed');

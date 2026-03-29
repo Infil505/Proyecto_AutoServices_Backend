@@ -1,4 +1,4 @@
-import { MiddlewareHandler } from 'hono';
+
 
 // Pagination utilities
 export interface PaginationOptions {

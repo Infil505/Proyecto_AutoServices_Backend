@@ -63,7 +63,7 @@ export class UserService {
       exp: Math.floor(Date.now() / 1000) + parseExpiresIn(config.jwtExpiresIn)
     };
 
-    const token = createJWT(payload, config.jwtSecret);
+    const token = await createJWT(payload, config.jwtSecret);
     return { user, token };
   }
 }

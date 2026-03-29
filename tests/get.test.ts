@@ -72,9 +72,9 @@ function createApp(type: 'technician' | 'company' | 'super_admin', phone: string
     c.set('user', { id: 1, type, phone, iat: 0, exp: 9_999_999_999 });
     await next();
   });
-  app.route('/api/appointments', appointmentRoutes);
-  app.route('/api/companies', companyRoutes);
-  app.route('/api/technicians', technicianRoutes);
+  app.route('/api/v1/appointments', appointmentRoutes);
+  app.route('/api/v1/companies', companyRoutes);
+  app.route('/api/v1/technicians', technicianRoutes);
   return app;
 }
 
@@ -100,7 +100,7 @@ describe('GET /health', () => {
 describe('GET /api/appointments — role filtering', () => {
   it('super_admin receives all appointments', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.appointments.$get();
+    const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(2);
@@ -108,7 +108,7 @@ describe('GET /api/appointments — role filtering', () => {
 
   it('company receives only own appointments', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.appointments.$get();
+    const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(1);
@@ -117,7 +117,7 @@ describe('GET /api/appointments — role filtering', () => {
 
   it('technician receives only own appointments', async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.appointments.$get();
+    const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(1);
@@ -131,13 +131,13 @@ describe('GET /api/appointments — role filtering', () => {
 describe('GET /api/appointments/:id — access control', () => {
   it('returns 404 for non-existent id', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '999' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '999' } });
     expect(res.status).toBe(404);
   });
 
   it('super_admin can access any appointment', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '1' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '1' } });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.id).toBe(1);
@@ -145,25 +145,25 @@ describe('GET /api/appointments/:id — access control', () => {
 
   it('company can access own appointment', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '1' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '1' } });
     expect(res.status).toBe(200);
   });
 
   it("company cannot access another company's appointment", async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '2' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '2' } });
     expect(res.status).toBe(403);
   });
 
   it('technician can access own appointment', async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '1' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '1' } });
     expect(res.status).toBe(200);
   });
 
   it("technician cannot access another technician's appointment", async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.appointments[':id'].$get({ param: { id: '2' } });
+    const res = await client.api.v1.appointments[':id'].$get({ param: { id: '2' } });
     expect(res.status).toBe(403);
   });
 });
@@ -174,7 +174,7 @@ describe('GET /api/appointments/:id — access control', () => {
 describe('GET /api/companies — role filtering', () => {
   it('super_admin receives all companies', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.companies.$get();
+    const res = await client.api.v1.companies.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(2);
@@ -182,7 +182,7 @@ describe('GET /api/companies — role filtering', () => {
 
   it('company receives only own company', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.companies.$get();
+    const res = await client.api.v1.companies.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(1);
@@ -191,7 +191,7 @@ describe('GET /api/companies — role filtering', () => {
 
   it('technician receives 403', async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.companies.$get();
+    const res = await client.api.v1.companies.$get();
     expect(res.status).toBe(403);
   });
 });
@@ -202,19 +202,19 @@ describe('GET /api/companies — role filtering', () => {
 describe('GET /api/companies/:phone — access control', () => {
   it('returns 404 for non-existent company', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.companies[':phone'].$get({ param: { phone: '+0000000000' } });
+    const res = await client.api.v1.companies[':phone'].$get({ param: { phone: '+0000000000' } });
     expect(res.status).toBe(404);
   });
 
   it('company can access own record', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.companies[':phone'].$get({ param: { phone: '+1111111111' } });
+    const res = await client.api.v1.companies[':phone'].$get({ param: { phone: '+1111111111' } });
     expect(res.status).toBe(200);
   });
 
   it("company cannot access another company's record", async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.companies[':phone'].$get({ param: { phone: '+9999999999' } });
+    const res = await client.api.v1.companies[':phone'].$get({ param: { phone: '+9999999999' } });
     expect(res.status).toBe(403);
   });
 });
@@ -225,7 +225,7 @@ describe('GET /api/companies/:phone — access control', () => {
 describe('GET /api/technicians — role filtering', () => {
   it('super_admin receives all technicians', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.technicians.$get();
+    const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(2);
@@ -233,7 +233,7 @@ describe('GET /api/technicians — role filtering', () => {
 
   it('company receives only own technicians', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.technicians.$get();
+    const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(1);
@@ -242,7 +242,7 @@ describe('GET /api/technicians — role filtering', () => {
 
   it('technician receives only own record', async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.technicians.$get();
+    const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveLength(1);
@@ -256,31 +256,31 @@ describe('GET /api/technicians — role filtering', () => {
 describe('GET /api/technicians/:phone — access control', () => {
   it('returns 404 for non-existent technician', async () => {
     const client = testClient(createApp('super_admin', '+0000000000')) as any;
-    const res = await client.api.technicians[':phone'].$get({ param: { phone: '+0000000000' } });
+    const res = await client.api.v1.technicians[':phone'].$get({ param: { phone: '+0000000000' } });
     expect(res.status).toBe(404);
   });
 
   it('technician can access own record', async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.technicians[':phone'].$get({ param: { phone: '+2222222222' } });
+    const res = await client.api.v1.technicians[':phone'].$get({ param: { phone: '+2222222222' } });
     expect(res.status).toBe(200);
   });
 
   it("technician cannot access another technician's record", async () => {
     const client = testClient(createApp('technician', '+2222222222')) as any;
-    const res = await client.api.technicians[':phone'].$get({ param: { phone: '+8888888888' } });
+    const res = await client.api.v1.technicians[':phone'].$get({ param: { phone: '+8888888888' } });
     expect(res.status).toBe(403);
   });
 
   it('company can access own technician', async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.technicians[':phone'].$get({ param: { phone: '+2222222222' } });
+    const res = await client.api.v1.technicians[':phone'].$get({ param: { phone: '+2222222222' } });
     expect(res.status).toBe(200);
   });
 
   it("company cannot access another company's technician", async () => {
     const client = testClient(createApp('company', '+1111111111')) as any;
-    const res = await client.api.technicians[':phone'].$get({ param: { phone: '+8888888888' } });
+    const res = await client.api.v1.technicians[':phone'].$get({ param: { phone: '+8888888888' } });
     expect(res.status).toBe(403);
   });
 });

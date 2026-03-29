@@ -32,7 +32,7 @@ function jwtMiddleware(secret: string) {
       return c.json({ error: "Missing authorization header" }, 401);
     }
     const token = authHeader.substring(7);
-    const payload = verifyJWT(token, secret);
+    const payload = await verifyJWT(token, secret);
     if (!payload) {
       return c.json({ error: "Invalid token" }, 401);
     }
@@ -56,32 +56,32 @@ app.use("*", cors({ origin: config.corsOrigins }));
 app.use("*", rateLimit(config.rateLimitMax, config.rateLimitWindowMs));
 
 // Public auth routes
-app.route("/api/auth", authRoutes);
+app.route("/api/v1/auth", authRoutes);
 
 // JWT middleware for protected routes
 const jwtProtect = jwtMiddleware(config.jwtSecret);
-app.use("/api/appointments/*", jwtProtect);
-app.use("/api/companies/*", jwtProtect);
-app.use("/api/customers/*", jwtProtect);
-app.use("/api/services/*", jwtProtect);
-app.use("/api/service-specialties/*", jwtProtect);
-app.use("/api/specialties/*", jwtProtect);
-app.use("/api/technicians/*", jwtProtect);
-app.use("/api/technician-specialties/*", jwtProtect);
-app.use("/api/coverage-zones/*", jwtProtect);
-app.use("/api/users/*", jwtProtect);
+app.use("/api/v1/appointments/*", jwtProtect);
+app.use("/api/v1/companies/*", jwtProtect);
+app.use("/api/v1/customers/*", jwtProtect);
+app.use("/api/v1/services/*", jwtProtect);
+app.use("/api/v1/service-specialties/*", jwtProtect);
+app.use("/api/v1/specialties/*", jwtProtect);
+app.use("/api/v1/technicians/*", jwtProtect);
+app.use("/api/v1/technician-specialties/*", jwtProtect);
+app.use("/api/v1/coverage-zones/*", jwtProtect);
+app.use("/api/v1/users/*", jwtProtect);
 
 // Protected routes
-app.route("/api/appointments", appointmentRoutes);
-app.route("/api/companies", companyRoutes);
-app.route("/api/customers", customerRoutes);
-app.route("/api/services", serviceRoutes);
-app.route("/api/service-specialties", serviceSpecialtyRoutes);
-app.route("/api/specialties", specialtyRoutes);
-app.route("/api/technicians", technicianRoutes);
-app.route("/api/technician-specialties", technicianSpecialtyRoutes);
-app.route("/api/coverage-zones", coverageZoneRoutes);
-app.route("/api/users", userRoutes);
+app.route("/api/v1/appointments", appointmentRoutes);
+app.route("/api/v1/companies", companyRoutes);
+app.route("/api/v1/customers", customerRoutes);
+app.route("/api/v1/services", serviceRoutes);
+app.route("/api/v1/service-specialties", serviceSpecialtyRoutes);
+app.route("/api/v1/specialties", specialtyRoutes);
+app.route("/api/v1/technicians", technicianRoutes);
+app.route("/api/v1/technician-specialties", technicianSpecialtyRoutes);
+app.route("/api/v1/coverage-zones", coverageZoneRoutes);
+app.route("/api/v1/users", userRoutes);
 
 // Health check
 app.get("/health", (c) =>

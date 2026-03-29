@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bun test:*)"
+      "Bash(bun test:*)",
+      "Bash(bun --eval \"import { sign, verify } from ''hono/jwt''; console.log\\(''hono/jwt ok''\\)\")"
     ]
   }
 }

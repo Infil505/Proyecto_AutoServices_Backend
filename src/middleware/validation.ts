@@ -1,4 +1,4 @@
-import { MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 
 // Validation middleware factory
@@ -27,7 +27,7 @@ export const validateBody = (schema: z.ZodSchema): MiddlewareHandler => {
 export const validateQuery = (schema: z.ZodSchema): MiddlewareHandler => {
   return async (c, next) => {
     try {
-      const query = Object.fromEntries(c.req.queries());
+      const query = c.req.query();
       const validatedData = schema.parse(query);
       c.set('validatedQuery', validatedData);
       await next();
@@ -44,13 +44,6 @@ export const validateQuery = (schema: z.ZodSchema): MiddlewareHandler => {
       return c.json({ error: 'Invalid query parameters' }, 400);
     }
   };
-};
-
-// Sanitization middleware
-export const sanitizeInput: MiddlewareHandler = async (c, next) => {
-  // Add input sanitization logic here
-  // For now, just pass through
-  await next();
 };
 
 // Rate limiting (simple in-memory implementation)
