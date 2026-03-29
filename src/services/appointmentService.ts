@@ -10,6 +10,14 @@ export class AppointmentService {
     return await db.select().from(appointments);
   }
 
+  static async getByTechnician(technicianPhone: string) {
+    return await db.select().from(appointments).where(eq(appointments.technicianPhone, technicianPhone));
+  }
+
+  static async getByCompany(companyPhone: string) {
+    return await db.select().from(appointments).where(eq(appointments.companyPhone, companyPhone));
+  }
+
   static async getById(id: number) {
     const result = await db.select().from(appointments).where(eq(appointments.id, id));
     return result[0];
@@ -32,7 +40,8 @@ export class AppointmentService {
   }
 
   static async delete(id: number) {
+    const existing = await AppointmentService.getById(id);
     await db.delete(appointments).where(eq(appointments.id, id));
-    AppointmentService.events.emit('appointment:deleted', { id });
+    AppointmentService.events.emit('appointment:deleted', existing ?? { id });
   }
 }

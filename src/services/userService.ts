@@ -1,21 +1,9 @@
 import bcrypt from 'bcrypt';
-import { createHmac } from 'crypto';
 import { eq } from 'drizzle-orm';
+import { config } from '../config/index.js';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
-
-// Simple JWT implementation using Node.js crypto
-function createJWT(payload: any, secret: string): string {
-  const header = JSON.stringify({ alg: 'HS256', typ: 'JWT' });
-  const encodedHeader = Buffer.from(header).toString('base64url');
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-
-  const signature = createHmac('sha256', secret)
-    .update(`${encodedHeader}.${encodedPayload}`)
-    .digest('base64url');
-
-  return `${encodedHeader}.${encodedPayload}.${signature}`;
-}
+import { createJWT, parseExpiresIn } from '../utils/jwt.js';
 
 export class UserService {
   static async getAll() {
@@ -28,14 +16,14 @@ export class UserService {
   }
 
   static async create(data: typeof users.$inferInsert) {
-    const hashedPassword = await bcrypt.hash(data.passwordHash, 10);
+    const hashedPassword = await bcrypt.hash(data.passwordHash, config.bcryptRounds);
     const result = await db.insert(users).values({ ...data, passwordHash: hashedPassword }).returning();
     return result[0];
   }
 
   static async update(id: number, data: Partial<typeof users.$inferInsert>) {
     if (data.passwordHash) {
-      data.passwordHash = await bcrypt.hash(data.passwordHash, 10);
+      data.passwordHash = await bcrypt.hash(data.passwordHash, config.bcryptRounds);
     }
     const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
     return result[0];
@@ -58,10 +46,10 @@ export class UserService {
       type: user.type,
       phone: user.phone,
       iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 86400 // 24 hours
+      exp: Math.floor(Date.now() / 1000) + parseExpiresIn(config.jwtExpiresIn)
     };
 
-    const token = createJWT(payload, process.env.JWT_SECRET!);
+    const token = createJWT(payload, config.jwtSecret);
     return { user, token };
   }
 }

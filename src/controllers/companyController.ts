@@ -6,19 +6,14 @@ const router = new Hono<AppContext>();
 
 router.get('/', async (c) => {
   const payload = c.var.user!;
-  let companies;
   if (payload.type === 'technician') {
     return c.json({ error: 'Unauthorized' }, 403);
-  } else if (payload.type === 'company') {
-    // Companies can only see their own company
-    companies = await CompanyService.getAll().then(all => 
-      all.filter(comp => comp.phone === payload.phone)
-    );
-  } else {
-    // super_admin sees all
-    companies = await CompanyService.getAll();
   }
-  return c.json(companies);
+  if (payload.type === 'company') {
+    const company = await CompanyService.getById(payload.phone);
+    return c.json(company ? [company] : []);
+  }
+  return c.json(await CompanyService.getAll());
 });
 
 router.get('/:phone', async (c) => {

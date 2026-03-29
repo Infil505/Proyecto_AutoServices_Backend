@@ -9,14 +9,13 @@ describe('Auth Routes', () => {
   const app = new Hono();
   app.route('/api/auth', authRoutes);
 
-  it('should return 400 for invalid registration data', async () => {
+  it('should return 400 for invalid company registration data', async () => {
     const client = testClient(app) as any;
-    const res = await client.api.auth.register.$post({
+    const res = await client.api.auth['register']['company'].$post({
       json: {
-        type: 'invalid_type',
-        phone: '123',
+        phone: '123', // too short / wrong format
         name: '',
-        password: '123'
+        password: '123' // too short
       }
     });
 
@@ -25,11 +24,10 @@ describe('Auth Routes', () => {
     expect(data.error).toBeDefined();
   });
 
-  it('should return 400 for missing required fields', async () => {
+  it('should return 400 for missing required fields on company registration', async () => {
     const client = testClient(app) as any;
-    const res = await client.api.auth.register.$post({
+    const res = await client.api.auth['register']['company'].$post({
       json: {
-        type: 'technician'
         // missing phone, name, password
       }
     });

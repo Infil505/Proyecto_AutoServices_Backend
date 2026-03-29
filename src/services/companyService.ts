@@ -1,6 +1,8 @@
-import { db } from '../db/index.js';
-import { companies } from '../db/schema.js';
+import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
+import { config } from '../config/index.js';
+import { db } from '../db/index.js';
+import { companies, users } from '../db/schema.js';
 
 export class CompanyService {
   static async getAll() {
@@ -15,6 +17,37 @@ export class CompanyService {
   static async create(data: typeof companies.$inferInsert) {
     const result = await db.insert(companies).values(data).returning();
     return result[0];
+  }
+
+  /** Self-registration: creates company + admin user in a single transaction. */
+  static async register(data: {
+    phone: string;
+    name: string;
+    email?: string;
+    password: string;
+    address?: string;
+    startHour?: string;
+    endHour?: string;
+  }) {
+    const hashedPassword = await bcrypt.hash(data.password, config.bcryptRounds);
+    return await db.transaction(async (tx) => {
+      const [company] = await tx.insert(companies).values({
+        phone: data.phone,
+        name: data.name,
+        email: data.email,
+        address: data.address,
+        startHour: data.startHour,
+        endHour: data.endHour,
+      }).returning();
+      await tx.insert(users).values({
+        type: 'company',
+        phone: data.phone,
+        name: data.name,
+        email: data.email,
+        passwordHash: hashedPassword,
+      });
+      return company;
+    });
   }
 
   static async update(phone: string, data: Partial<typeof companies.$inferInsert>) {

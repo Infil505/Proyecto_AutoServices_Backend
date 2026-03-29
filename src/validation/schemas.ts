@@ -1,12 +1,25 @@
 import { z } from 'zod';
 
-// User validation schemas
-export const userSchema = z.object({
-  type: z.enum(['technician', 'company', 'super_admin']),
-  phone: z.string().min(10).max(15).regex(/^\+?[1-9]\d{1,14}$/),
+const phoneField = z.string().min(10).max(15).regex(/^\+?[1-9]\d{1,14}$/);
+const passwordField = z.string().min(8).max(128);
+
+// Company self-registration (public)
+export const companyRegisterSchema = z.object({
+  phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
-  password: z.string().min(8).max(128)
+  password: passwordField,
+  address: z.string().max(500).optional(),
+  startHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  endHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+});
+
+// Super admin creation (protected, super_admin only)
+export const adminRegisterSchema = z.object({
+  phone: phoneField,
+  name: z.string().min(2).max(100),
+  email: z.string().email().optional(),
+  password: passwordField,
 });
 
 export const loginSchema = z.object({
@@ -26,10 +39,12 @@ export const companySchema = z.object({
 
 // Technician validation schemas
 export const technicianSchema = z.object({
-  companyPhone: z.string().min(10).max(15),
+  phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
-  available: z.boolean().optional()
+  password: passwordField,
+  companyPhone: phoneField.optional(), // required for super_admin; auto-set from JWT for company role
+  available: z.boolean().optional(),
 });
 
 // Service validation schemas
@@ -42,14 +57,17 @@ export const serviceSchema = z.object({
 });
 
 // Appointment validation schemas
+export const appointmentStatusEnum = z.enum(['pending', 'scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled']);
+
 export const appointmentSchema = z.object({
   customerPhone: z.string().min(10).max(15).optional(),
   companyPhone: z.string().min(10).max(15),
   technicianPhone: z.string().min(10).max(15).optional(),
-  serviceId: z.number().int().positive(),
-  scheduledDate: z.string().datetime(),
-  status: z.enum(['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled']).optional(),
-  notes: z.string().max(1000).optional()
+  serviceId: z.number().int().positive().optional(),
+  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  status: appointmentStatusEnum.optional(),
+  content: z.string().max(2000).optional(),
 });
 
 // Customer validation schemas
@@ -84,7 +102,7 @@ export const paginationSchema = z.object({
 
 // Search/Filter schemas
 export const appointmentFilterSchema = z.object({
-  status: z.enum(['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled']).optional(),
+  status: appointmentStatusEnum.optional(),
   technicianPhone: z.string().optional(),
   customerPhone: z.string().optional(),
   dateFrom: z.string().datetime().optional(),

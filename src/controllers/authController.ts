@@ -1,42 +1,82 @@
 import { Hono } from 'hono';
+import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
+import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
 
 const router = new Hono<AppContext>();
 
-router.post('/register', async (c) => {
-  const { type, phone, name, email, password } = await c.req.json();
+/**
+ * POST /api/auth/register/company
+ * Public. Creates a company record and its admin user in a single transaction.
+ */
+router.post('/register/company', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
 
-  if (!type || !phone || !name || !password) {
-    return c.json({ error: 'Type, phone, name, and password are required' }, 400);
-  }
-
-  if (!['technician', 'company', 'super_admin'].includes(type)) {
-    return c.json({ error: 'Invalid user type' }, 400);
+  const result = companyRegisterSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
   }
 
   try {
-    const user = await UserService.create({
-      type,
-      phone,
-      name,
-      email,
-      passwordHash: password, // Will be hashed in service
-    });
-    return c.json({ user }, 201);
-  } catch (error) {
-    return c.json({ error: 'User already exists or invalid data' }, 400);
+    const company = await CompanyService.register(result.data);
+    return c.json({ company }, 201);
+  } catch {
+    return c.json({ error: 'Phone already registered' }, 409);
   }
 });
 
-router.post('/login', async (c) => {
-  const { phone, password } = await c.req.json();
-
-  if (!phone || !password) {
-    return c.json({ error: 'Phone and password required' }, 400);
+/**
+ * POST /api/auth/register/admin
+ * Protected — only super_admin can create another super_admin.
+ */
+router.post('/register/admin', async (c) => {
+  const user = c.var.user;
+  if (!user || user.type !== 'super_admin') {
+    return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const auth = await UserService.authenticate(phone, password);
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = adminRegisterSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const { phone, name, email, password } = result.data;
+  try {
+    const admin = await UserService.create({ type: 'super_admin', phone, name, email, passwordHash: password });
+    return c.json({ user: admin }, 201);
+  } catch {
+    return c.json({ error: 'Phone already registered' }, 409);
+  }
+});
+
+/**
+ * POST /api/auth/login
+ * Public. Returns a JWT on valid credentials.
+ */
+router.post('/login', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const result = loginSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const auth = await UserService.authenticate(result.data.phone, result.data.password);
   if (!auth) {
     return c.json({ error: 'Invalid credentials' }, 401);
   }

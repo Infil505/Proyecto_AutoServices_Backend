@@ -1,6 +1,8 @@
-import { createHmac } from "crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { config } from "./src/config/index.js";
+import { rateLimit } from "./src/middleware/validation.js";
+import { verifyJWT } from "./src/utils/jwt.js";
 import appointmentRoutes from "./src/routes/appointmentRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import companyRoutes from "./src/routes/companyRoutes.js";
@@ -27,47 +29,27 @@ function jwtMiddleware(secret: string) {
     if (!authHeader) {
       return c.json({ error: "Missing authorization header" }, 401);
     }
-
     const token = authHeader.replace("Bearer ", "");
-    try {
-      const parts = token.split(".");
-      if (parts.length !== 3) {
-        throw new Error("Invalid token format");
-      }
-
-      const [encodedHeader, encodedPayload, signature] = parts;
-      const testSignature = createHmac("sha256", secret)
-        .update(`${encodedHeader}.${encodedPayload}`)
-        .digest("base64url");
-
-      if (signature !== testSignature) {
-        throw new Error("Invalid signature");
-      }
-
-      const payload = JSON.parse(
-        Buffer.from(encodedPayload, "base64url").toString(),
-      );
-
-      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-        throw new Error("Token expired");
-      }
-
-      c.var.user = payload;
-      await next();
-    } catch (error) {
+    const payload = verifyJWT(token, secret);
+    if (!payload) {
       return c.json({ error: "Invalid token" }, 401);
     }
+    c.var.user = payload;
+    await next();
   };
 }
 
 // CORS middleware
-app.use("*", cors());
+app.use("*", cors({ origin: config.corsOrigins }));
+
+// Rate limiting
+app.use("*", rateLimit(config.rateLimitMax, config.rateLimitWindowMs));
 
 // Public auth routes
 app.route("/api/auth", authRoutes);
 
 // JWT middleware for protected routes
-const jwtProtect = jwtMiddleware(process.env.JWT_SECRET!);
+const jwtProtect = jwtMiddleware(config.jwtSecret);
 app.use("/api/appointments/*", jwtProtect);
 app.use("/api/companies/*", jwtProtect);
 app.use("/api/customers/*", jwtProtect);
@@ -809,7 +791,7 @@ app.notFound((c) => {
 });
 
 Bun.serve({
-  port: 3000,
+  port: config.port,
   fetch: app.fetch,
 });
 

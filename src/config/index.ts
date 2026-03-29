@@ -1,7 +1,3 @@
-import { config } from 'dotenv';
-
-// Load environment variables
-config();
 
 interface Config {
   port: number;
@@ -28,13 +24,14 @@ const getConfig = (): Config => {
   const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes
   const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
-  // Validate required environment variables
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-
-  if (!jwtSecret || jwtSecret === 'default-secret-change-in-production') {
-    throw new Error('JWT_SECRET environment variable must be set and not use default value');
+  // Validate required environment variables (only in production)
+  if (nodeEnv === 'production') {
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+    if (!jwtSecret || jwtSecret === 'default-secret-change-in-production') {
+      throw new Error('JWT_SECRET environment variable must be set and not use default value');
+    }
   }
 
   return {
