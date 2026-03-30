@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "crypto";
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import logger from "./src/utils/logger.js";
 import { cors } from "hono/cors";
 import { config } from "./src/config/index.js";
@@ -27,7 +27,7 @@ startAppointmentWebsocket();
 
 // JWT verification middleware
 function jwtMiddleware(secret: string) {
-  return async (c: any, next: any) => {
+  return async (c: Context<AppContext>, next: Next) => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "Missing authorization header" }, 401);
@@ -37,7 +37,7 @@ function jwtMiddleware(secret: string) {
     if (!payload) {
       return c.json({ error: "Invalid token" }, 401);
     }
-    c.var.user = payload;
+    c.set("user", payload as AppContext["Variables"]["user"]);
     await next();
   };
 }
