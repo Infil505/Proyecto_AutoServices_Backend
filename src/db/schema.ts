@@ -95,6 +95,13 @@ export const coverageZones = pgTable('coverage_zones', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
+export const technicianCoverageZones = pgTable('technician_coverage_zones', {
+  technicianPhone: text('technician_phone').notNull().references(() => technicians.phone, { onDelete: 'cascade' }),
+  coverageZoneId: bigint('coverage_zone_id', { mode: 'number' }).notNull().references(() => coverageZones.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.technicianPhone, table.coverageZoneId] }),
+}));
+
 // Not in DB dump — kept as-is since the auth system depends on it
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { CoverageZoneService } from '../services/coverageZoneService.js';
+import { TechnicianCoverageZoneService } from '../services/technicianCoverageZoneService.js';
 import type { AppContext } from '../types.js';
 import { coverageZoneSchema } from '../validation/schemas.js';
 
@@ -8,9 +9,8 @@ const router = new Hono<AppContext>();
 router.get('/', async (c) => {
   const payload = c.var.user!;
   if (payload.type === 'technician') {
-    const companyPhone = payload.companyPhone;
-    if (!companyPhone) return c.json([]);
-    return c.json(await CoverageZoneService.getByCompany(companyPhone));
+    // El técnico ve únicamente las zonas a las que está asignado
+    return c.json(await TechnicianCoverageZoneService.getZonesByTechnician(payload.phone));
   }
   if (payload.type === 'company') {
     return c.json(await CoverageZoneService.getByCompany(payload.phone));
@@ -23,15 +23,15 @@ router.get('/:id', async (c) => {
   const payload = c.var.user!;
   const zone = await CoverageZoneService.getById(id);
   if (!zone) return c.json({ error: 'Not found' }, 404);
-  
-  // Check company access
+
   if (payload.type === 'company' && zone.companyPhone !== payload.phone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
-  if (payload.type === 'technician' && zone.companyPhone !== payload.companyPhone) {
-    return c.json({ error: 'Unauthorized' }, 403);
+  if (payload.type === 'technician') {
+    const assigned = await TechnicianCoverageZoneService.getAssignment(payload.phone, id);
+    if (!assigned) return c.json({ error: 'Unauthorized' }, 403);
   }
-  
+
   return c.json(zone);
 });
 
@@ -89,17 +89,17 @@ router.put('/:id', async (c) => {
 router.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  
-  // Companies can delete their zones, super_admins can delete any
+
+  if (payload.type === 'technician') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
   if (payload.type === 'company') {
     const zone = await CoverageZoneService.getById(id);
     if (!zone || zone.companyPhone !== payload.phone) {
       return c.json({ error: 'Can only delete own zones' }, 403);
     }
-  } else if (payload.type === 'technician') {
-    return c.json({ error: 'Unauthorized' }, 403);
   }
-  
+
   await CoverageZoneService.delete(id);
   return c.json({ message: 'Deleted' });
 });

@@ -124,6 +124,12 @@ export const serviceFilterSchema = z.object({
   active: z.boolean().optional()
 });
 
+// Technician coverage zone assignment (junction)
+export const technicianCoverageZoneSchema = z.object({
+  technicianPhone: z.string().min(10).max(15),
+  coverageZoneId: z.number().int().positive(),
+});
+
 // Specialty validation schemas
 export const specialtySchema = z.object({
   name: z.string().min(2).max(100),

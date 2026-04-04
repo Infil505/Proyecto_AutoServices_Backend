@@ -15,6 +15,7 @@ import serviceSpecialtyRoutes from "./src/routes/serviceSpecialtyRoutes.js";
 import specialtyRoutes from "./src/routes/specialtyRoutes.js";
 import technicianRoutes from "./src/routes/technicianRoutes.js";
 import technicianSpecialtyRoutes from "./src/routes/technicianSpecialtyRoutes.js";
+import technicianCoverageZoneRoutes from "./src/routes/technicianCoverageZoneRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
@@ -74,6 +75,7 @@ app.use("/api/v1/specialties/*", jwtProtect);
 app.use("/api/v1/technicians/*", jwtProtect);
 app.use("/api/v1/technician-specialties/*", jwtProtect);
 app.use("/api/v1/coverage-zones/*", jwtProtect);
+app.use("/api/v1/technician-coverage-zones/*", jwtProtect);
 app.use("/api/v1/users/*", jwtProtect);
 
 // Protected routes
@@ -86,6 +88,7 @@ app.route("/api/v1/specialties", specialtyRoutes);
 app.route("/api/v1/technicians", technicianRoutes);
 app.route("/api/v1/technician-specialties", technicianSpecialtyRoutes);
 app.route("/api/v1/coverage-zones", coverageZoneRoutes);
+app.route("/api/v1/technician-coverage-zones", technicianCoverageZoneRoutes);
 app.route("/api/v1/users", userRoutes);
 
 // Health check

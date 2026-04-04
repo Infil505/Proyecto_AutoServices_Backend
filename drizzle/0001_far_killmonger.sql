@@ -1,0 +1,1 @@
+-- migration vacía (no-op): la versión anterior fue revertida antes de aplicarse
