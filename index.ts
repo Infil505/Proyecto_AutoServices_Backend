@@ -19,11 +19,15 @@ import userRoutes from "./src/routes/userRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
+import { EmailService } from "./src/services/emailService.js";
 
 const app = new Hono<AppContext>();
 
 // Start badge websocket feed for appointments (pub/sub)
 startAppointmentWebsocket();
+
+// Start email listener — sends PDF to customer when both statuses are completed
+EmailService.startEmailListener();
 
 // JWT verification middleware
 function jwtMiddleware(secret: string) {

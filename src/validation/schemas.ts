@@ -70,6 +70,15 @@ export const appointmentSchema = z.object({
   content: z.string().max(2000).optional(),
 });
 
+// Status update schemas (dedicated endpoints, RBAC-isolated)
+export const technicianStatusSchema = z.object({
+  estatusTecnico: z.boolean(),
+});
+
+export const adminStatusSchema = z.object({
+  estatusAdministrador: z.boolean(),
+});
+
 // Customer validation schemas
 export const customerSchema = z.object({
   phone: z.string().min(10).max(15).regex(/^\+?[1-9]\d{1,14}$/),

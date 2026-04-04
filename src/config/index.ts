@@ -12,6 +12,8 @@ interface Config {
   bcryptRounds: number;
   shutdownUser: string;
   shutdownPassword: string;
+  resendApiKey: string;
+  resendFromEmail: string;
 }
 
 const getConfig = (): Config => {
@@ -27,6 +29,8 @@ const getConfig = (): Config => {
   const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
   const shutdownUser = process.env.SHUTDOWN_USER || 'admin_shutdown';
   const shutdownPassword = process.env.SHUTDOWN_PASSWORD || 'change_this_password';
+  const resendApiKey = process.env.RESEND_API_KEY || '';
+  const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@autoservices.com';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -54,6 +58,8 @@ const getConfig = (): Config => {
     bcryptRounds,
     shutdownUser,
     shutdownPassword,
+    resendApiKey,
+    resendFromEmail,
   };
 };
 

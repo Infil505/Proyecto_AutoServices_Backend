@@ -69,6 +69,22 @@ describe('Appointment Service Events', () => {
   });
 });
 
+describe('EmailService — both_completed event trigger', () => {
+  it('registers listener without throwing on startEmailListener()', async () => {
+    const { EmailService } = await import('../src/services/emailService');
+    expect(() => EmailService.startEmailListener()).not.toThrow();
+  });
+
+  it('appointment:both_completed event does not throw synchronously', async () => {
+    const { AppointmentService } = await import('../src/services/appointmentService');
+    // Emit the event — the async handler will fail silently (no DB/API in tests)
+    // What we verify is that the EventEmitter wiring itself doesn't crash
+    expect(() =>
+      AppointmentService.events.emit('appointment:both_completed', { id: 9999 })
+    ).not.toThrow();
+  });
+});
+
 describe('Health Check', () => {
   it('should return OK status', async () => {
     const app = new Hono();

@@ -79,6 +79,8 @@ export const appointments = pgTable('appointments', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   coordinates: jsonb('coordinates'),
   serviceId: bigint('service_id', { mode: 'number' }).references(() => services.id),
+  estatusTecnico: boolean('estatus_tecnico'),
+  estatusAdministrador: boolean('estatus_administrador'),
 });
 
 export const coverageZones = pgTable('coverage_zones', {

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { EventEmitter } from 'events';
 import { db } from '../db/index.js';
-import { appointments } from '../db/schema.js';
+import { appointments, customers, companies, technicians, services } from '../db/schema.js';
 
 export class AppointmentService {
   static events = new EventEmitter();
@@ -43,5 +43,55 @@ export class AppointmentService {
     const existing = await AppointmentService.getById(id);
     await db.delete(appointments).where(eq(appointments.id, id));
     AppointmentService.events.emit('appointment:deleted', existing ?? { id });
+  }
+
+  static async getFullById(id: number) {
+    const result = await db
+      .select({
+        appointment: appointments,
+        customer: customers,
+        company: companies,
+        technician: technicians,
+        service: services,
+      })
+      .from(appointments)
+      .leftJoin(customers, eq(appointments.customerPhone, customers.phone))
+      .leftJoin(companies, eq(appointments.companyPhone, companies.phone))
+      .leftJoin(technicians, eq(appointments.technicianPhone, technicians.phone))
+      .leftJoin(services, eq(appointments.serviceId, services.id))
+      .where(eq(appointments.id, id));
+    return result[0];
+  }
+
+  static async updateTechnicianStatus(id: number, estatusTecnico: boolean) {
+    const result = await db
+      .update(appointments)
+      .set({ estatusTecnico })
+      .where(eq(appointments.id, id))
+      .returning();
+    const appointment = result[0];
+    if (appointment) {
+      AppointmentService.events.emit('appointment:updated', appointment);
+      if (appointment.estatusTecnico && appointment.estatusAdministrador) {
+        AppointmentService.events.emit('appointment:both_completed', appointment);
+      }
+    }
+    return appointment;
+  }
+
+  static async updateAdminStatus(id: number, estatusAdministrador: boolean) {
+    const result = await db
+      .update(appointments)
+      .set({ estatusAdministrador })
+      .where(eq(appointments.id, id))
+      .returning();
+    const appointment = result[0];
+    if (appointment) {
+      AppointmentService.events.emit('appointment:updated', appointment);
+      if (appointment.estatusTecnico && appointment.estatusAdministrador) {
+        AppointmentService.events.emit('appointment:both_completed', appointment);
+      }
+    }
+    return appointment;
   }
 }
