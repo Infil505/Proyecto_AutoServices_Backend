@@ -4,6 +4,7 @@ import { AppointmentService } from '../services/appointmentService.js';
 import type { AppContext } from '../types.js';
 import { technicianSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { handleDbError } from '../utils/dbErrors.js';
 
 const router = new Hono<AppContext>();
 
@@ -89,10 +90,8 @@ router.post('/', async (c) => {
   try {
     return c.json(await TechnicianService.register({ ...result.data, companyPhone }), 201);
   } catch (err) {
-    if ((err as any)?.code === '23505') {
-      return c.json({ error: 'Phone already registered' }, 409);
-    }
-    throw err;
+    const mapped = handleDbError(err);
+    return c.json({ error: mapped.error }, mapped.status as any);
   }
 });
 

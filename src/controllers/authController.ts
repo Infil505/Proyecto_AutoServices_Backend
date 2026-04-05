@@ -5,6 +5,7 @@ import type { AppContext } from '../types.js';
 import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
 import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
 import { config } from '../config/index.js';
+import { handleDbError } from '../utils/dbErrors.js';
 
 const router = new Hono<AppContext>();
 
@@ -28,10 +29,8 @@ router.post('/register/company', async (c) => {
     const company = await CompanyService.register(result.data);
     return c.json({ company }, 201);
   } catch (err) {
-    if ((err as any)?.code === '23505') {
-      return c.json({ error: 'Phone already registered' }, 409);
-    }
-    throw err;
+    const mapped = handleDbError(err);
+    return c.json({ error: mapped.error }, mapped.status as any);
   }
 });
 
@@ -61,10 +60,8 @@ router.post('/register/admin', async (c) => {
     const admin = await UserService.create({ type: 'super_admin', phone, name, email, passwordHash: password });
     return c.json({ user: admin }, 201);
   } catch (err) {
-    if ((err as any)?.code === '23505') {
-      return c.json({ error: 'Phone already registered' }, 409);
-    }
-    throw err;
+    const mapped = handleDbError(err);
+    return c.json({ error: mapped.error }, mapped.status as any);
   }
 });
 

@@ -58,10 +58,6 @@ router.put('/:id', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type === 'technician') return c.json({ error: 'Unauthorized' }, 403);
-  if (payload.type === 'company') {
-    const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== payload.phone) return c.json({ error: 'Can only update own services' }, 403);
-  }
 
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid JSON' }, 400);
@@ -69,6 +65,11 @@ router.put('/:id', async (c) => {
   const result = serviceSchema.partial().safeParse(body);
   if (!result.success) {
     return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+  }
+
+  if (payload.type === 'company') {
+    const service = await ServiceService.getById(id);
+    if (!service || service.companyPhone !== payload.phone) return c.json({ error: 'Can only update own services' }, 403);
   }
 
   return c.json(await ServiceService.update(id, result.data));

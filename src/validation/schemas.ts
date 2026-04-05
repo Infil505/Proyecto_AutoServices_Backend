@@ -133,3 +133,12 @@ export const technicianSpecialtySchema = z.object({
   technicianPhone: z.string().min(10).max(15),
   specialtyId: z.number().int().positive()
 });
+
+// User creation/update validation (super_admin only)
+export const userSchema = z.object({
+  phone: phoneField,
+  name: z.string().min(2).max(100),
+  email: z.string().email().optional(),
+  password: passwordField,
+  type: z.enum(['super_admin', 'company', 'technician']),
+});

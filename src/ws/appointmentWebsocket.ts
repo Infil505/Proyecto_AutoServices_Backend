@@ -2,6 +2,7 @@ import { IncomingMessage } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { AppointmentService } from '../services/appointmentService.js';
 import { verifyJWT } from '../utils/jwt.js';
+import { config } from '../config/index.js';
 
 const WS_PORT = Number(process.env.WS_PORT ?? 3001);
 const AUTH_TIMEOUT_MS = 5_000;
@@ -45,7 +46,14 @@ export function startAppointmentWebsocket() {
     wss.on('close', () => clearInterval(heartbeatTimer));
 
     // ── Connection handler ───────────────────────────────────────────────────
-    wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
+    wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+        // Origin validation — only allow configured CORS origins
+        const origin = req.headers.origin;
+        if (origin && !config.corsOrigins.includes(origin)) {
+            ws.close(1008, 'Origin not allowed');
+            return;
+        }
+
         ws.send(JSON.stringify({ type: 'auth_required' }));
 
         const authTimeout = setTimeout(() => {

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { config } from '../config/index.js';
 
 // Singleton — shared between middleware and endpoint
 const metrics = {
@@ -60,6 +61,12 @@ export const createMetricsApp = () => {
   const app = new Hono();
 
   app.get('/metrics', (c) => {
+    if (config.metricsApiKey) {
+      const key = c.req.header('X-Metrics-Key');
+      if (key !== config.metricsApiKey) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+    }
     return c.json({
       uptime: Date.now() - metrics.uptime,
       requests: {

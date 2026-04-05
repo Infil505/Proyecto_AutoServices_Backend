@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
+import { userSchema } from '../validation/schemas.js';
 
 const router = new Hono<AppContext>();
 
@@ -18,15 +19,14 @@ router.get('/:id', async (c) => {
   const payload = c.var.user!;
   const user = await UserService.getById(id);
   if (!user) return c.json({ error: 'Not found' }, 404);
-  
-  // Technicians can access themselves, companies their business users, super_admins any
+
   if (payload.type === 'technician' && (user.phone !== payload.phone || user.type !== 'technician')) {
     return c.json({ error: 'Can only access own data' }, 403);
   }
   if (payload.type === 'company' && user.phone !== payload.phone) {
     return c.json({ error: 'Can only access own business users' }, 403);
   }
-  
+
   return c.json(user);
 });
 
@@ -40,14 +40,23 @@ router.post('/', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid JSON' }, 400);
 
-  const user = await UserService.create(body);
+  const result = userSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const { password, ...rest } = result.data;
+  const user = await UserService.create({ ...rest, passwordHash: password });
   return c.json(user, 201);
 });
 
 router.put('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  
+
   const existing = await UserService.getById(id);
   if (!existing) return c.json({ error: 'Not found' }, 404);
 
@@ -61,25 +70,33 @@ router.put('/:id', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid JSON' }, 400);
 
-  const user = await UserService.update(id, body);
+  const result = userSchema.partial().safeParse(body);
+  if (!result.success) {
+    return c.json({
+      error: 'Validation failed',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    }, 400);
+  }
+
+  const { password, ...rest } = result.data;
+  const user = await UserService.update(id, { ...rest, ...(password ? { passwordHash: password } : {}) });
   return c.json(user);
 });
 
 router.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  
+
   const existing = await UserService.getById(id);
   if (!existing) return c.json({ error: 'Not found' }, 404);
-  
-  // Technicians can delete themselves, companies their business users, super_admins any
+
   if (payload.type === 'technician' && (existing.phone !== payload.phone || existing.type !== 'technician')) {
     return c.json({ error: 'Can only delete own data' }, 403);
   }
   if (payload.type === 'company' && existing.phone !== payload.phone) {
     return c.json({ error: 'Can only delete own business users' }, 403);
   }
-  
+
   await UserService.delete(id);
   return c.json({ message: 'Deleted' });
 });

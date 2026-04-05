@@ -1,45 +1,100 @@
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { technicianCoverageZones, coverageZones, technicians } from '../db/schema.js';
 
+type Page = { limit: number; offset: number };
+
 export class TechnicianCoverageZoneService {
-  static async getAll() {
-    return await db.select().from(technicianCoverageZones);
+  static async getAll(p?: Page) {
+    const q = db.select().from(technicianCoverageZones);
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
   }
 
-  // Todas las asignaciones de un técnico
-  static async getByTechnician(technicianPhone: string) {
-    return await db.select().from(technicianCoverageZones)
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(technicianCoverageZones);
+    return Number(row?.value ?? 0);
+  }
+
+  // All assignments for a technician (raw junction rows)
+  static async getByTechnician(technicianPhone: string, p?: Page) {
+    const q = db.select().from(technicianCoverageZones)
       .where(eq(technicianCoverageZones.technicianPhone, technicianPhone));
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
   }
 
-  // Todos los técnicos asignados a una zona
+  static async countByTechnician(technicianPhone: string): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(technicianCoverageZones)
+      .where(eq(technicianCoverageZones.technicianPhone, technicianPhone));
+    return Number(row?.value ?? 0);
+  }
+
+  // All assignments for a company — single JOIN, no N+1
+  static async getByCompany(companyPhone: string, p?: Page) {
+    const q = db
+      .select({ assignment: technicianCoverageZones })
+      .from(technicianCoverageZones)
+      .innerJoin(technicians, eq(technicianCoverageZones.technicianPhone, technicians.phone))
+      .where(eq(technicians.companyPhone, companyPhone));
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(r => r.assignment);
+  }
+
+  static async countByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(technicianCoverageZones)
+      .innerJoin(technicians, eq(technicianCoverageZones.technicianPhone, technicians.phone))
+      .where(eq(technicians.companyPhone, companyPhone));
+    return Number(row?.value ?? 0);
+  }
+
+  // All technicians assigned to a zone (raw junction rows)
   static async getByZone(coverageZoneId: number) {
     return await db.select().from(technicianCoverageZones)
       .where(eq(technicianCoverageZones.coverageZoneId, coverageZoneId));
   }
 
-  // Zonas completas (con datos) a las que está asignado un técnico
-  static async getZonesByTechnician(technicianPhone: string) {
-    return await db
+  // Full zone data for a technician's assigned zones
+  static async getZonesByTechnician(technicianPhone: string, p?: Page) {
+    const q = db
       .select({ zone: coverageZones })
       .from(technicianCoverageZones)
       .innerJoin(coverageZones, eq(technicianCoverageZones.coverageZoneId, coverageZones.id))
-      .where(eq(technicianCoverageZones.technicianPhone, technicianPhone))
-      .then(rows => rows.map(r => r.zone));
+      .where(eq(technicianCoverageZones.technicianPhone, technicianPhone));
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(r => r.zone);
   }
 
-  // Técnicos completos (con datos) asignados a una zona
-  static async getTechniciansByZone(coverageZoneId: number) {
-    return await db
+  static async countZonesByTechnician(technicianPhone: string): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(technicianCoverageZones)
+      .where(eq(technicianCoverageZones.technicianPhone, technicianPhone));
+    return Number(row?.value ?? 0);
+  }
+
+  // Full technician data for all technicians assigned to a zone
+  static async getTechniciansByZone(coverageZoneId: number, p?: Page) {
+    const q = db
       .select({ technician: technicians })
       .from(technicianCoverageZones)
       .innerJoin(technicians, eq(technicianCoverageZones.technicianPhone, technicians.phone))
-      .where(eq(technicianCoverageZones.coverageZoneId, coverageZoneId))
-      .then(rows => rows.map(r => r.technician));
+      .where(eq(technicianCoverageZones.coverageZoneId, coverageZoneId));
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(r => r.technician);
   }
 
-  // Verificar si existe una asignación concreta
+  static async countTechniciansByZone(coverageZoneId: number): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(technicianCoverageZones)
+      .where(eq(technicianCoverageZones.coverageZoneId, coverageZoneId));
+    return Number(row?.value ?? 0);
+  }
+
+  // Check if a specific assignment exists
   static async getAssignment(technicianPhone: string, coverageZoneId: number) {
     const result = await db.select().from(technicianCoverageZones).where(
       and(

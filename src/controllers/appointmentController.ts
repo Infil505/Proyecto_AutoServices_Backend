@@ -110,7 +110,7 @@ router.patch('/:id/status/tecnico', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type !== 'technician') {
-    return c.json({ error: 'Solo el tecnico puede actualizar estatus_tecnico' }, 403);
+    return c.json({ error: 'Only technicians can update estatus_tecnico' }, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -127,7 +127,7 @@ router.patch('/:id/status/tecnico', async (c) => {
   const appointment = await AppointmentService.getById(id);
   if (!appointment) return c.json({ error: 'Not found' }, 404);
   if (appointment.technicianPhone !== payload.phone) {
-    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
+    return c.json({ error: 'You do not have permission to update this appointment' }, 403);
   }
 
   return c.json(await AppointmentService.updateTechnicianStatus(id, result.data.estatusTecnico));
@@ -138,7 +138,7 @@ router.patch('/:id/status/administrador', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type !== 'company') {
-    return c.json({ error: 'Solo el administrador de la compania puede actualizar estatus_administrador' }, 403);
+    return c.json({ error: 'Only company admins can update estatus_administrador' }, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -155,7 +155,7 @@ router.patch('/:id/status/administrador', async (c) => {
   const appointment = await AppointmentService.getById(id);
   if (!appointment) return c.json({ error: 'Not found' }, 404);
   if (appointment.companyPhone !== payload.phone) {
-    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
+    return c.json({ error: 'You do not have permission to update this appointment' }, 403);
   }
 
   return c.json(await AppointmentService.updateAdminStatus(id, result.data.estatusAdministrador));
@@ -181,7 +181,12 @@ router.get('/:id/pdf', async (c) => {
   const fullData = await AppointmentService.getFullById(id);
   if (!fullData) return c.json({ error: 'Not found' }, 404);
 
-  const pdfBuffer = await PdfService.generateAppointmentPdf(fullData);
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await PdfService.generateAppointmentPdf(fullData);
+  } catch {
+    return c.json({ error: 'Error generating PDF' }, 500);
+  }
 
   return new Response(pdfBuffer, {
     headers: {

@@ -22,11 +22,22 @@ import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 import { EmailService } from "./src/services/emailService.js";
+import { db } from "./src/db/index.js";
+import { sql } from "drizzle-orm";
+
+// ── DB health check ──────────────────────────────────────────────────────────
+try {
+  await db.execute(sql`SELECT 1`);
+  logger.info("Database connection established");
+} catch (err) {
+  logger.error(`Failed to connect to database: ${(err as Error).message}`);
+  process.exit(1);
+}
 
 const app = new Hono<AppContext>();
 
 // Start badge websocket feed for appointments (pub/sub)
-startAppointmentWebsocket();
+const wss = startAppointmentWebsocket();
 
 // Start email listener — sends PDF to customer when both statuses are completed
 EmailService.startEmailListener();
@@ -166,14 +177,21 @@ app.notFound((c) => {
   return c.json({ error: "Not Found" }, 404);
 });
 
-Bun.serve({
+const server = Bun.serve({
   port: config.port,
   fetch: app.fetch,
 });
 
-console.log("AutoServices REST API running on http://localhost:3000");
-console.log("API Documentation:");
-console.log("  POST /api/auth/register - Register new user");
-console.log("  POST /api/auth/login - Login");
-console.log("  GET /health - Health check");
-console.log("  Protected endpoints require: Authorization: Bearer <token>");
+logger.info(`AutoServices REST API running on http://localhost:${config.port}`);
+logger.info(`API docs available at http://localhost:${config.port}/api/v1/docs`);
+
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+function shutdown(signal: string) {
+  logger.info(`${signal} received — shutting down gracefully`);
+  wss.close(() => logger.info("WebSocket server closed"));
+  server.stop();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

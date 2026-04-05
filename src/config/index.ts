@@ -16,6 +16,7 @@ interface Config {
   resendApiKey: string;
   resendFromEmail: string;
   redisUrl: string;
+  metricsApiKey: string;
 }
 
 const getConfig = (): Config => {
@@ -35,6 +36,7 @@ const getConfig = (): Config => {
   const resendApiKey = process.env.RESEND_API_KEY || '';
   const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@autoservices.com';
   const redisUrl = process.env.REDIS_URL || '';
+  const metricsApiKey = process.env.METRICS_API_KEY || '';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -66,6 +68,7 @@ const getConfig = (): Config => {
     resendApiKey,
     resendFromEmail,
     redisUrl,
+    metricsApiKey,
   };
 };
 
