@@ -4,6 +4,7 @@ interface Config {
   nodeEnv: string;
   jwtSecret: string;
   jwtExpiresIn: string;
+  jwtRefreshExpiresIn: string;
   databaseUrl: string;
   logLevel: string;
   corsOrigins: string[];
@@ -14,6 +15,7 @@ interface Config {
   shutdownPassword: string;
   resendApiKey: string;
   resendFromEmail: string;
+  redisUrl: string;
 }
 
 const getConfig = (): Config => {
@@ -21,6 +23,7 @@ const getConfig = (): Config => {
   const nodeEnv = process.env.NODE_ENV || 'development';
   const jwtSecret = process.env.JWT_SECRET || 'default-secret-change-in-production';
   const jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
+  const jwtRefreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
   const databaseUrl = process.env.DATABASE_URL || '';
   const logLevel = process.env.LOG_LEVEL || 'info';
   const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',');
@@ -31,6 +34,7 @@ const getConfig = (): Config => {
   const shutdownPassword = process.env.SHUTDOWN_PASSWORD || 'change_this_password';
   const resendApiKey = process.env.RESEND_API_KEY || '';
   const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@autoservices.com';
+  const redisUrl = process.env.REDIS_URL || '';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -50,6 +54,7 @@ const getConfig = (): Config => {
     nodeEnv,
     jwtSecret,
     jwtExpiresIn,
+    jwtRefreshExpiresIn,
     databaseUrl,
     logLevel,
     corsOrigins,
@@ -60,6 +65,7 @@ const getConfig = (): Config => {
     shutdownPassword,
     resendApiKey,
     resendFromEmail,
+    redisUrl,
   };
 };
 

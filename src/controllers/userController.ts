@@ -31,35 +31,37 @@ router.get('/:id', async (c) => {
 });
 
 router.post('/', async (c) => {
-  const data = await c.req.json();
   const payload = c.var.user!;
-  
-  // Only super_admins can create users
+
   if (payload.type !== 'super_admin') {
     return c.json({ error: 'Only super_admins can create users' }, 403);
   }
-  
-  const user = await UserService.create(data);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const user = await UserService.create(body);
   return c.json(user, 201);
 });
 
 router.put('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const data = await c.req.json();
   const payload = c.var.user!;
   
   const existing = await UserService.getById(id);
   if (!existing) return c.json({ error: 'Not found' }, 404);
-  
-  // Technicians can update themselves, companies their business users, super_admins any
+
   if (payload.type === 'technician' && (existing.phone !== payload.phone || existing.type !== 'technician')) {
     return c.json({ error: 'Can only update own data' }, 403);
   }
   if (payload.type === 'company' && existing.phone !== payload.phone) {
     return c.json({ error: 'Can only update own business users' }, 403);
   }
-  
-  const user = await UserService.update(id, data);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+
+  const user = await UserService.update(id, body);
   return c.json(user);
 });
 

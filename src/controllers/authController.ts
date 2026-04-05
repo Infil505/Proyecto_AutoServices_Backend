@@ -3,6 +3,8 @@ import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
 import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
+import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
+import { config } from '../config/index.js';
 
 const router = new Hono<AppContext>();
 
@@ -25,8 +27,11 @@ router.post('/register/company', async (c) => {
   try {
     const company = await CompanyService.register(result.data);
     return c.json({ company }, 201);
-  } catch {
-    return c.json({ error: 'Phone already registered' }, 409);
+  } catch (err) {
+    if ((err as any)?.code === '23505') {
+      return c.json({ error: 'Phone already registered' }, 409);
+    }
+    throw err;
   }
 });
 
@@ -55,8 +60,11 @@ router.post('/register/admin', async (c) => {
   try {
     const admin = await UserService.create({ type: 'super_admin', phone, name, email, passwordHash: password });
     return c.json({ user: admin }, 201);
-  } catch {
-    return c.json({ error: 'Phone already registered' }, 409);
+  } catch (err) {
+    if ((err as any)?.code === '23505') {
+      return c.json({ error: 'Phone already registered' }, 409);
+    }
+    throw err;
   }
 });
 
@@ -81,7 +89,39 @@ router.post('/login', async (c) => {
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
-  return c.json({ user: auth.user, token: auth.token });
+  return c.json({ user: auth.user, token: auth.token, refreshToken: auth.refreshToken });
+});
+
+/**
+ * POST /api/auth/refresh
+ * Public. Exchanges a valid refresh token for a new access token.
+ */
+router.post('/refresh', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body?.refreshToken || typeof body.refreshToken !== 'string') {
+    return c.json({ error: 'refreshToken is required' }, 400);
+  }
+
+  const payload = await verifyJWT(body.refreshToken, config.jwtSecret);
+  if (!payload || payload.tokenType !== 'refresh') {
+    return c.json({ error: 'Invalid or expired refresh token' }, 401);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const token = await createJWT(
+    {
+      id: payload.id,
+      type: payload.type,
+      phone: payload.phone,
+      ...(payload.companyPhone ? { companyPhone: payload.companyPhone } : {}),
+      tokenType: 'access',
+      iat: now,
+      exp: now + parseExpiresIn(config.jwtExpiresIn),
+    },
+    config.jwtSecret
+  );
+
+  return c.json({ token });
 });
 
 export default router;

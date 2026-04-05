@@ -3,20 +3,33 @@ import { AppointmentService } from '../services/appointmentService.js';
 import { PdfService } from '../services/pdfService.js';
 import type { AppContext } from '../types.js';
 import { appointmentSchema, technicianStatusSchema, adminStatusSchema } from '../validation/schemas.js';
+import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 
 const router = new Hono<AppContext>();
 
 router.get('/', async (c) => {
   const payload = c.var.user!;
-  let appts;
+  const { page, limit, offset } = parsePagination(c);
+
   if (payload.type === 'technician') {
-    appts = await AppointmentService.getByTechnician(payload.phone);
-  } else if (payload.type === 'company') {
-    appts = await AppointmentService.getByCompany(payload.phone);
-  } else {
-    appts = await AppointmentService.getAll();
+    const [data, total] = await Promise.all([
+      AppointmentService.getByTechnician(payload.phone, { limit, offset }),
+      AppointmentService.countByTechnician(payload.phone),
+    ]);
+    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
-  return c.json(appts);
+  if (payload.type === 'company') {
+    const [data, total] = await Promise.all([
+      AppointmentService.getByCompany(payload.phone, { limit, offset }),
+      AppointmentService.countByCompany(payload.phone),
+    ]);
+    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  }
+  const [data, total] = await Promise.all([
+    AppointmentService.getAll({ limit, offset }),
+    AppointmentService.countAll(),
+  ]);
+  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
 });
 
 router.get('/:id', async (c) => {
@@ -24,15 +37,14 @@ router.get('/:id', async (c) => {
   const payload = c.var.user!;
   const appointment = await AppointmentService.getById(id);
   if (!appointment) return c.json({ error: 'Not found' }, 404);
-  
-  // Check access
+
   if (payload.type === 'technician' && appointment.technicianPhone !== payload.phone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
   if (payload.type === 'company' && appointment.companyPhone !== payload.phone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
-  
+
   return c.json(appointment);
 });
 
@@ -85,7 +97,6 @@ router.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
 
-  // Only companies and super_admins can delete appointments
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
     return c.json({ error: 'Only companies and super_admins can delete appointments' }, 403);
   }
@@ -94,20 +105,12 @@ router.delete('/:id', async (c) => {
   return c.json({ message: 'Deleted' });
 });
 
-// PATCH /:id/status/tecnico — solo el técnico asignado puede confirmar su finalización
 router.patch('/:id/status/tecnico', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
 
   if (payload.type !== 'technician') {
     return c.json({ error: 'Solo el tecnico puede actualizar estatus_tecnico' }, 403);
-  }
-
-  const appointment = await AppointmentService.getById(id);
-  if (!appointment) return c.json({ error: 'Not found' }, 404);
-
-  if (appointment.technicianPhone !== payload.phone) {
-    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -121,24 +124,21 @@ router.patch('/:id/status/tecnico', async (c) => {
     }, 400);
   }
 
-  const updated = await AppointmentService.updateTechnicianStatus(id, result.data.estatusTecnico);
-  return c.json(updated);
+  const appointment = await AppointmentService.getById(id);
+  if (!appointment) return c.json({ error: 'Not found' }, 404);
+  if (appointment.technicianPhone !== payload.phone) {
+    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
+  }
+
+  return c.json(await AppointmentService.updateTechnicianStatus(id, result.data.estatusTecnico));
 });
 
-// PATCH /:id/status/administrador — solo el administrador de la compañia asignada puede confirmar
 router.patch('/:id/status/administrador', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
 
   if (payload.type !== 'company') {
     return c.json({ error: 'Solo el administrador de la compania puede actualizar estatus_administrador' }, 403);
-  }
-
-  const appointment = await AppointmentService.getById(id);
-  if (!appointment) return c.json({ error: 'Not found' }, 404);
-
-  if (appointment.companyPhone !== payload.phone) {
-    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -152,11 +152,15 @@ router.patch('/:id/status/administrador', async (c) => {
     }, 400);
   }
 
-  const updated = await AppointmentService.updateAdminStatus(id, result.data.estatusAdministrador);
-  return c.json(updated);
+  const appointment = await AppointmentService.getById(id);
+  if (!appointment) return c.json({ error: 'Not found' }, 404);
+  if (appointment.companyPhone !== payload.phone) {
+    return c.json({ error: 'No tienes permiso para actualizar esta cita' }, 403);
+  }
+
+  return c.json(await AppointmentService.updateAdminStatus(id, result.data.estatusAdministrador));
 });
 
-// GET /:id/pdf — genera y descarga el PDF de la cita; requiere que ambos estatus sean true
 router.get('/:id/pdf', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
@@ -164,16 +168,14 @@ router.get('/:id/pdf', async (c) => {
   const appointment = await AppointmentService.getById(id);
   if (!appointment) return c.json({ error: 'Not found' }, 404);
 
-  // Verificar acceso
   if (payload.type === 'technician' && appointment.technicianPhone !== payload.phone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
   if (payload.type === 'company' && appointment.companyPhone !== payload.phone) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
-
   if (!appointment.estatusTecnico || !appointment.estatusAdministrador) {
-    return c.json({ error: 'El PDF solo se genera cuando ambos estatus (tecnico y administrador) son true' }, 422);
+    return c.json({ error: 'El PDF solo se genera cuando ambos estatus son true' }, 422);
   }
 
   const fullData = await AppointmentService.getFullById(id);

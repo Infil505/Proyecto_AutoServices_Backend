@@ -1,10 +1,19 @@
+import { count, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { specialties } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+
+type Page = { limit: number; offset: number };
 
 export class SpecialtyService {
-  static async getAll() {
-    return await db.select().from(specialties);
+  static async getAll(p?: Page) {
+    const q = db.select().from(specialties);
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
+  }
+
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(specialties);
+    return Number(row?.value ?? 0);
   }
 
   static async getById(id: number) {

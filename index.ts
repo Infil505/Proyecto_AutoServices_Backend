@@ -4,6 +4,7 @@ import logger from "./src/utils/logger.js";
 import { cors } from "hono/cors";
 import { config } from "./src/config/index.js";
 import { rateLimit } from "./src/middleware/validation.js";
+import { metricsMiddleware, createMetricsApp } from "./src/middleware/metrics.js";
 import { verifyJWT } from "./src/utils/jwt.js";
 import appointmentRoutes from "./src/routes/appointmentRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
@@ -39,7 +40,7 @@ function jwtMiddleware(secret: string) {
     }
     const token = authHeader.substring(7);
     const payload = await verifyJWT(token, secret);
-    if (!payload) {
+    if (!payload || payload.tokenType === 'refresh') {
       return c.json({ error: "Invalid token" }, 401);
     }
     c.set("user", payload as AppContext["Variables"]["user"]);
@@ -47,13 +48,14 @@ function jwtMiddleware(secret: string) {
   };
 }
 
-// Request logging
+// Request logging + metrics
 app.use("*", async (c, next) => {
   const start = Date.now();
   await next();
   const ms = Date.now() - start;
   logger.http(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
 });
+app.use("*", metricsMiddleware());
 
 // CORS middleware
 app.use("*", cors({ origin: config.corsOrigins }));
@@ -102,7 +104,7 @@ const shutdownAttempts = new Map<string, { count: number; resetAt: number }>();
 app.post("/health/shutdown", async (c) => {
   const ip =
     c.req.header("CF-Connecting-IP") ||
-    c.req.header("X-Forwarded-For")?.split(",")[0].trim() ||
+    c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ||
     c.req.header("X-Real-IP") ||
     "unknown";
 
@@ -142,6 +144,9 @@ app.post("/health/shutdown", async (c) => {
   setTimeout(() => process.exit(0), 300);
   return c.json({ message: "Shutting down" }, 200);
 });
+
+// Metrics endpoint (internal — no JWT required)
+app.route("/", createMetricsApp());
 
 // API Documentation (Swagger UI + OpenAPI spec)
 app.route("/api/v1", docsRoutes);

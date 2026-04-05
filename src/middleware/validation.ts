@@ -1,85 +1,67 @@
 import type { MiddlewareHandler } from 'hono';
-import { z } from 'zod';
+import Redis from 'ioredis';
+import { config } from '../config/index.js';
 
-// Validation middleware factory
-export const validateBody = (schema: z.ZodSchema): MiddlewareHandler => {
-  return async (c, next) => {
+// ── Rate limiting ────────────────────────────────────────────────────────────
+
+// Redis client — lazy, only if REDIS_URL is configured
+let _redis: Redis | null = null;
+
+function getRedis(): Redis | null {
+  if (!config.redisUrl) return null;
+  if (!_redis) {
+    _redis = new Redis(config.redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    _redis.on('error', () => {
+      // Silently fall back to in-memory on connection error
+      _redis = null;
+    });
+  }
+  return _redis;
+}
+
+// In-memory fallback
+const memoryStore = new Map<string, { count: number; resetTime: number }>();
+
+async function isAllowed(ip: string, windowMs: number, maxRequests: number): Promise<boolean> {
+  const redis = getRedis();
+
+  if (redis) {
     try {
-      const body = await c.req.json();
-      const validatedData = schema.parse(body);
-      c.set('validatedBody', validatedData);
-      await next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json({
-          error: 'Validation failed',
-          details: error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message
-          }))
-        }, 400);
-      }
-      return c.json({ error: 'Invalid JSON' }, 400);
+      const key = `rl:${ip}:${Math.floor(Date.now() / windowMs)}`;
+      const count = await redis.incr(key);
+      if (count === 1) await redis.pexpire(key, windowMs);
+      return count <= maxRequests;
+    } catch {
+      // Fall through to in-memory on Redis error
     }
-  };
-};
+  }
 
-export const validateQuery = (schema: z.ZodSchema): MiddlewareHandler => {
+  // In-memory sliding window
+  const now = Date.now();
+  const key = `${ip}:${Math.floor(now / windowMs)}`;
+  const entry = memoryStore.get(key) ?? { count: 0, resetTime: now + windowMs };
+  if (now > entry.resetTime) { entry.count = 0; entry.resetTime = now + windowMs; }
+  entry.count++;
+  memoryStore.set(key, entry);
+
+  // Periodic cleanup (1% chance)
+  if (Math.random() < 0.01) {
+    for (const [k, v] of memoryStore) if (now > v.resetTime) memoryStore.delete(k);
+  }
+
+  return entry.count <= maxRequests;
+}
+
+export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000): MiddlewareHandler => {
   return async (c, next) => {
-    try {
-      const query = c.req.query();
-      const validatedData = schema.parse(query);
-      c.set('validatedQuery', validatedData);
-      await next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json({
-          error: 'Query validation failed',
-          details: error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message
-          }))
-        }, 400);
-      }
-      return c.json({ error: 'Invalid query parameters' }, 400);
-    }
-  };
-};
+    const ip =
+      c.req.header('CF-Connecting-IP') ||
+      c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
+      c.req.header('X-Real-IP') ||
+      'unknown';
 
-// Rate limiting (simple in-memory implementation)
-const requestCounts = new Map<string, { count: number; resetTime: number }>();
-
-export const rateLimit = (maxRequests: number = 100, windowMs: number = 15 * 60 * 1000): MiddlewareHandler => {
-  return async (c, next) => {
-    const ip = c.req.header('CF-Connecting-IP') ||
-               c.req.header('X-Forwarded-For') ||
-               c.req.header('X-Real-IP') ||
-               'unknown';
-
-    const now = Date.now();
-    const windowKey = `${ip}:${Math.floor(now / windowMs)}`;
-
-    const current = requestCounts.get(windowKey) || { count: 0, resetTime: now + windowMs };
-
-    if (now > current.resetTime) {
-      current.count = 0;
-      current.resetTime = now + windowMs;
-    }
-
-    if (current.count >= maxRequests) {
+    if (!(await isAllowed(ip, windowMs, maxRequests))) {
       return c.json({ error: 'Too many requests' }, 429);
-    }
-
-    current.count++;
-    requestCounts.set(windowKey, current);
-
-    // Clean up old entries periodically
-    if (Math.random() < 0.01) { // 1% chance to clean up
-      for (const [key, value] of requestCounts.entries()) {
-        if (now > value.resetTime) {
-          requestCounts.delete(key);
-        }
-      }
     }
 
     await next();

@@ -13,7 +13,7 @@ if (results.length === 0) {
   process.exit(0);
 }
 
-const appt = results[0];
+const appt = results[0]!;
 console.log(`Cita encontrada: #${appt.id} | customer: ${appt.customerPhone} | company: ${appt.companyPhone}`);
 console.log('Enviando email...');
 

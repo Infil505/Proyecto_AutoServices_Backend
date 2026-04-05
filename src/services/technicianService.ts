@@ -1,16 +1,32 @@
 import bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { config } from '../config/index.js';
 import { db } from '../db/index.js';
 import { technicians, users } from '../db/schema.js';
 
+type Page = { limit: number; offset: number };
+
 export class TechnicianService {
-  static async getAll() {
-    return await db.select().from(technicians);
+  static async getAll(p?: Page) {
+    const q = db.select().from(technicians);
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
   }
 
-  static async getByCompany(companyPhone: string) {
-    return await db.select().from(technicians).where(eq(technicians.companyPhone, companyPhone));
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(technicians);
+    return Number(row?.value ?? 0);
+  }
+
+  static async getByCompany(companyPhone: string, p?: Page) {
+    const q = db.select().from(technicians).where(eq(technicians.companyPhone, companyPhone));
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
+  }
+
+  static async countByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(technicians).where(eq(technicians.companyPhone, companyPhone));
+    return Number(row?.value ?? 0);
   }
 
   static async getById(phone: string) {
@@ -23,30 +39,19 @@ export class TechnicianService {
     return result[0];
   }
 
-  /** Creates technician + user account in a single transaction. */
   static async register(data: {
-    phone: string;
-    name: string;
-    email?: string;
-    password: string;
-    companyPhone: string;
-    available?: boolean;
+    phone: string; name: string; email?: string; password: string;
+    companyPhone: string; available?: boolean;
   }) {
     const hashedPassword = await bcrypt.hash(data.password, config.bcryptRounds);
     return await db.transaction(async (tx) => {
       const [technician] = await tx.insert(technicians).values({
-        phone: data.phone,
-        name: data.name,
-        email: data.email,
-        companyPhone: data.companyPhone,
-        available: data.available,
+        phone: data.phone, name: data.name, email: data.email,
+        companyPhone: data.companyPhone, available: data.available,
       }).returning();
       await tx.insert(users).values({
-        type: 'technician',
-        phone: data.phone,
-        name: data.name,
-        email: data.email,
-        passwordHash: hashedPassword,
+        type: 'technician', phone: data.phone, name: data.name,
+        email: data.email, passwordHash: hashedPassword,
       });
       return technician;
     });

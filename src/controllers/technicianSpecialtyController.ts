@@ -3,12 +3,17 @@ import { TechnicianSpecialtyService } from '../services/technicianSpecialtyServi
 import { TechnicianService } from '../services/technicianService.js';
 import { technicianSpecialtySchema } from '../validation/schemas.js';
 import type { AppContext } from '../types.js';
+import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 
 const router = new Hono<AppContext>();
 
 router.get('/', async (c) => {
-  const technicianSpecialties = await TechnicianSpecialtyService.getAll();
-  return c.json(technicianSpecialties);
+  const { page, limit, offset } = parsePagination(c);
+  const [data, total] = await Promise.all([
+    TechnicianSpecialtyService.getAll({ limit, offset }),
+    TechnicianSpecialtyService.countAll(),
+  ]);
+  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
 });
 
 router.get('/technician/:technicianPhone', async (c) => {
@@ -37,24 +42,27 @@ router.get('/specialty/:specialtyId', async (c) => {
 });
 
 router.post('/', async (c) => {
-  const data = await c.req.json();
   const payload = c.var.user!;
-  
-  // Solo compañías y super_admins pueden gestionar especialidades de técnicos
+
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
     return c.json({ error: 'Only companies and super_admins can manage technician specialties' }, 403);
   }
-  
-  // Si es una compañía, verificar que el técnico pertenece a esa compañía
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  const result = technicianSpecialtySchema.safeParse(body);
+  if (!result.success) {
+    return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+  }
+
   if (payload.type === 'company') {
-    const technician = await TechnicianService.getById(data.technicianPhone);
+    const technician = await TechnicianService.getById(result.data.technicianPhone);
     if (!technician || technician.companyPhone !== payload.phone) {
       return c.json({ error: 'Can only manage specialties for technicians in your company' }, 403);
     }
   }
-  
-  const validatedData = technicianSpecialtySchema.parse(data);
-  const technicianSpecialty = await TechnicianSpecialtyService.create(validatedData);
+
+  const technicianSpecialty = await TechnicianSpecialtyService.create(result.data);
   return c.json(technicianSpecialty, 201);
 });
 

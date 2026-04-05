@@ -1,4 +1,4 @@
-import { bigint, bigserial, boolean, date, integer, jsonb, pgTable, primaryKey, serial, text, time, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, date, integer, jsonb, pgTable, primaryKey, serial, text, time, timestamp } from 'drizzle-orm/pg-core';
 
 export const companies = pgTable('companies', {
   phone: text('phone').primaryKey(),
@@ -111,14 +111,4 @@ export const users = pgTable('users', {
   email: text('email'),
   passwordHash: text('password_hash').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
-
-export const tasks = pgTable('tasks', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  title: text('title').notNull(),
-  description: text('description'),
-  status: text('status').notNull().default('pending'),
-  priority: text('priority').notNull().default('medium'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

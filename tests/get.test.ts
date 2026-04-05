@@ -15,11 +15,18 @@ const mockAppointments = [
 mock.module('../src/services/appointmentService', () => ({
   AppointmentService: {
     getAll: mock(() => Promise.resolve(mockAppointments)),
+    countAll: mock(() => Promise.resolve(mockAppointments.length)),
     getByTechnician: mock((phone: string) =>
       Promise.resolve(mockAppointments.filter(a => a.technicianPhone === phone))
     ),
+    countByTechnician: mock((phone: string) =>
+      Promise.resolve(mockAppointments.filter(a => a.technicianPhone === phone).length)
+    ),
     getByCompany: mock((phone: string) =>
       Promise.resolve(mockAppointments.filter(a => a.companyPhone === phone))
+    ),
+    countByCompany: mock((phone: string) =>
+      Promise.resolve(mockAppointments.filter(a => a.companyPhone === phone).length)
     ),
     getById: mock((id: number) =>
       Promise.resolve(mockAppointments.find(a => a.id === id) ?? null)
@@ -36,6 +43,7 @@ const mockCompanies = [
 mock.module('../src/services/companyService', () => ({
   CompanyService: {
     getAll: mock(() => Promise.resolve(mockCompanies)),
+    countAll: mock(() => Promise.resolve(mockCompanies.length)),
     getById: mock((phone: string) =>
       Promise.resolve(mockCompanies.find(c => c.phone === phone) ?? null)
     ),
@@ -50,8 +58,12 @@ const mockTechnicians = [
 mock.module('../src/services/technicianService', () => ({
   TechnicianService: {
     getAll: mock(() => Promise.resolve(mockTechnicians)),
+    countAll: mock(() => Promise.resolve(mockTechnicians.length)),
     getByCompany: mock((phone: string) =>
       Promise.resolve(mockTechnicians.filter(t => t.companyPhone === phone))
+    ),
+    countByCompany: mock((phone: string) =>
+      Promise.resolve(mockTechnicians.filter(t => t.companyPhone === phone).length)
     ),
     getById: mock((phone: string) =>
       Promise.resolve(mockTechnicians.find(t => t.phone === phone) ?? null)
@@ -103,7 +115,7 @@ describe('GET /api/appointments — role filtering', () => {
     const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(2);
+    expect(body.data).toHaveLength(2);
   });
 
   it('company receives only own appointments', async () => {
@@ -111,8 +123,8 @@ describe('GET /api/appointments — role filtering', () => {
     const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].companyPhone).toBe('+1111111111');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].companyPhone).toBe('+1111111111');
   });
 
   it('technician receives only own appointments', async () => {
@@ -120,8 +132,8 @@ describe('GET /api/appointments — role filtering', () => {
     const res = await client.api.v1.appointments.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].technicianPhone).toBe('+2222222222');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].technicianPhone).toBe('+2222222222');
   });
 });
 
@@ -177,7 +189,7 @@ describe('GET /api/companies — role filtering', () => {
     const res = await client.api.v1.companies.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(2);
+    expect(body.data).toHaveLength(2);
   });
 
   it('company receives only own company', async () => {
@@ -185,8 +197,8 @@ describe('GET /api/companies — role filtering', () => {
     const res = await client.api.v1.companies.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].phone).toBe('+1111111111');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].phone).toBe('+1111111111');
   });
 
   it('technician receives 403', async () => {
@@ -228,7 +240,7 @@ describe('GET /api/technicians — role filtering', () => {
     const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(2);
+    expect(body.data).toHaveLength(2);
   });
 
   it('company receives only own technicians', async () => {
@@ -236,8 +248,8 @@ describe('GET /api/technicians — role filtering', () => {
     const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].companyPhone).toBe('+1111111111');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].companyPhone).toBe('+1111111111');
   });
 
   it('technician receives only own record', async () => {
@@ -245,8 +257,8 @@ describe('GET /api/technicians — role filtering', () => {
     const res = await client.api.v1.technicians.$get();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].phone).toBe('+2222222222');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].phone).toBe('+2222222222');
   });
 });
 

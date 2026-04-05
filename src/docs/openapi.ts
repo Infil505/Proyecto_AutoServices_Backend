@@ -1,5 +1,10 @@
 const bearerAuth = [{ BearerAuth: [] }];
 
+const paginationParams = [
+  { name: 'page', in: 'query' as const, schema: { type: 'integer', default: 1, minimum: 1 }, description: 'Page number' },
+  { name: 'limit', in: 'query' as const, schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 }, description: 'Items per page' },
+];
+
 const phoneParam = (name: string) => ({
   name,
   in: 'path' as const,
@@ -142,9 +147,10 @@ export const openApiSpec = {
             type: 'string',
             enum: ['pending', 'scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'],
           },
+          estatusTecnico: { type: 'boolean', nullable: true, description: 'Set to true by the assigned technician to mark work done' },
+          estatusAdministrador: { type: 'boolean', nullable: true, description: 'Set to true by the company admin to confirm completion. When both flags are true, status auto-sets to completed and a PDF is emailed to the customer.' },
           content: { type: 'string', nullable: true },
           createdAt: { type: 'string', format: 'date-time' },
-          updatedAt: { type: 'string', format: 'date-time' },
         },
       },
       Specialty: {
@@ -181,6 +187,30 @@ export const openApiSpec = {
         properties: {
           technicianPhone: { type: 'string' },
           specialtyId: { type: 'integer' },
+        },
+      },
+      TechnicianCoverageZone: {
+        type: 'object',
+        properties: {
+          technicianPhone: { type: 'string', example: '+1122334455' },
+          coverageZoneId: { type: 'integer' },
+        },
+      },
+      PaginatedResponse: {
+        type: 'object',
+        properties: {
+          data: { type: 'array', items: {} },
+          pagination: {
+            type: 'object',
+            properties: {
+              total: { type: 'integer' },
+              page: { type: 'integer' },
+              limit: { type: 'integer' },
+              totalPages: { type: 'integer' },
+              hasNext: { type: 'boolean' },
+              hasPrev: { type: 'boolean' },
+            },
+          },
         },
       },
     },
@@ -251,6 +281,35 @@ export const openApiSpec = {
         },
       },
     },
+    '/api/v1/auth/refresh': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Refresh access token',
+        description: 'Exchanges a valid refresh token for a new short-lived access token. **Public.**',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['refreshToken'],
+                properties: {
+                  refreshToken: { type: 'string', description: 'The refresh JWT returned at login' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          ...r200({
+            type: 'object',
+            properties: { token: { type: 'string', description: 'New access JWT' } },
+          }),
+          ...r400,
+          401: { description: 'Invalid or expired refresh token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
     '/api/v1/auth/login': {
       post: {
         tags: ['Auth'],
@@ -290,10 +349,16 @@ export const openApiSpec = {
       get: {
         tags: ['Appointments'],
         summary: 'List appointments',
-        description: '`super_admin` → all · `company` → own company · `technician` → assigned only',
+        description: '`super_admin` → all · `company` → own company · `technician` → assigned only. Returns a paginated response.',
         security: bearerAuth,
+        parameters: paginationParams,
         responses: {
-          ...r200({ type: 'array', items: { $ref: '#/components/schemas/Appointment' } }),
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Appointment' } } } },
+            ],
+          }),
           ...protectedResponses,
         },
       },
@@ -383,15 +448,98 @@ export const openApiSpec = {
       },
     },
 
+    '/api/v1/appointments/{id}/status/tecnico': {
+      patch: {
+        tags: ['Appointments'],
+        summary: 'Set technician completion status',
+        description: 'Only the assigned `technician` can call this. When both `estatusTecnico` and `estatusAdministrador` are `true`, the appointment status is automatically set to `completed` and a PDF receipt is emailed to the customer.',
+        security: bearerAuth,
+        parameters: [idParam()],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['estatusTecnico'],
+                properties: {
+                  estatusTecnico: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          ...r200({ $ref: '#/components/schemas/Appointment' }),
+          ...r400,
+          ...protectedResponses,
+          ...r404,
+        },
+      },
+    },
+    '/api/v1/appointments/{id}/status/administrador': {
+      patch: {
+        tags: ['Appointments'],
+        summary: 'Set admin completion status',
+        description: 'Only the `company` that owns the appointment can call this. When both flags are true, status → `completed` and PDF is emailed.',
+        security: bearerAuth,
+        parameters: [idParam()],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['estatusAdministrador'],
+                properties: {
+                  estatusAdministrador: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          ...r200({ $ref: '#/components/schemas/Appointment' }),
+          ...r400,
+          ...protectedResponses,
+          ...r404,
+        },
+      },
+    },
+    '/api/v1/appointments/{id}/pdf': {
+      get: {
+        tags: ['Appointments'],
+        summary: 'Download appointment PDF',
+        description: 'Returns a PDF receipt for the appointment. Only available when both `estatusTecnico` and `estatusAdministrador` are `true`. Returns 422 otherwise.',
+        security: bearerAuth,
+        parameters: [idParam()],
+        responses: {
+          200: {
+            description: 'PDF file',
+            content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+          },
+          422: { description: 'Both completion statuses must be true', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          ...protectedResponses,
+          ...r404,
+        },
+      },
+    },
+
     // ─── COMPANIES ─────────────────────────────────────────────────────────────
     '/api/v1/companies': {
       get: {
         tags: ['Companies'],
         summary: 'List companies',
-        description: '`super_admin` → all · `company` → own · `technician` → 403',
+        description: '`super_admin` → all · `company` → own · `technician` → 403. Returns a paginated response.',
         security: bearerAuth,
+        parameters: paginationParams,
         responses: {
-          ...r200({ type: 'array', items: { $ref: '#/components/schemas/Company' } }),
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Company' } } } },
+            ],
+          }),
           ...protectedResponses,
         },
       },
@@ -469,9 +617,18 @@ export const openApiSpec = {
       get: {
         tags: ['Customers'],
         summary: 'List customers',
-        description: '`super_admin` → all · `company` → own · `technician` → 403',
+        description: '`super_admin` → all · `company` → own · `technician` → 403. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Customer' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Customer' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Customers'],
@@ -547,9 +704,18 @@ export const openApiSpec = {
       get: {
         tags: ['Technicians'],
         summary: 'List technicians',
-        description: '`super_admin` → all · `company` → own · `technician` → own record only',
+        description: '`super_admin` → all · `company` → own · `technician` → own record only. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Technician' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Technician' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Technicians'],
@@ -622,8 +788,18 @@ export const openApiSpec = {
       get: {
         tags: ['Services'],
         summary: 'List services',
+        description: '`super_admin` → all · `company` and `technician` → own company only. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Service' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Service' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Services'],
@@ -695,8 +871,18 @@ export const openApiSpec = {
       get: {
         tags: ['Specialties'],
         summary: 'List specialties',
+        description: 'Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Specialty' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Specialty' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Specialties'],
@@ -768,8 +954,18 @@ export const openApiSpec = {
       get: {
         tags: ['Coverage Zones'],
         summary: 'List coverage zones',
+        description: '`super_admin` → all · `company` → own · `technician` → own assigned zones. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/CoverageZone' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/CoverageZone' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Coverage Zones'],
@@ -844,13 +1040,24 @@ export const openApiSpec = {
     '/api/v1/service-specialties': {
       get: {
         tags: ['Service Specialties'],
-        summary: 'List service-specialty links',
+        summary: 'List all service-specialty links',
+        description: 'Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/ServiceSpecialty' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/ServiceSpecialty' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Service Specialties'],
         summary: 'Link service to specialty',
+        description: 'Only `company` and `super_admin`.',
         security: bearerAuth,
         requestBody: {
           required: true,
@@ -870,6 +1077,24 @@ export const openApiSpec = {
         responses: { ...r201({ $ref: '#/components/schemas/ServiceSpecialty' }), ...r400, ...protectedResponses },
       },
     },
+    '/api/v1/service-specialties/service/{serviceId}': {
+      get: {
+        tags: ['Service Specialties'],
+        summary: 'Get specialties for a service',
+        security: bearerAuth,
+        parameters: [idParam('serviceId')],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/ServiceSpecialty' } }), ...protectedResponses },
+      },
+    },
+    '/api/v1/service-specialties/specialty/{specialtyId}': {
+      get: {
+        tags: ['Service Specialties'],
+        summary: 'Get services linked to a specialty',
+        security: bearerAuth,
+        parameters: [idParam('specialtyId')],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/ServiceSpecialty' } }), ...protectedResponses },
+      },
+    },
     '/api/v1/service-specialties/{serviceId}/{specialtyId}': {
       delete: {
         tags: ['Service Specialties'],
@@ -884,13 +1109,24 @@ export const openApiSpec = {
     '/api/v1/technician-specialties': {
       get: {
         tags: ['Technician Specialties'],
-        summary: 'List technician-specialty links',
+        summary: 'List all technician-specialty links',
+        description: 'Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianSpecialty' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/TechnicianSpecialty' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Technician Specialties'],
         summary: 'Link technician to specialty',
+        description: 'Only `company` and `super_admin`. Company can only assign specialties to their own technicians.',
         security: bearerAuth,
         requestBody: {
           required: true,
@@ -910,12 +1146,31 @@ export const openApiSpec = {
         responses: { ...r201({ $ref: '#/components/schemas/TechnicianSpecialty' }), ...r400, ...protectedResponses },
       },
     },
-    '/api/v1/technician-specialties/{phone}/{specialtyId}': {
+    '/api/v1/technician-specialties/technician/{technicianPhone}': {
+      get: {
+        tags: ['Technician Specialties'],
+        summary: 'Get specialties for a technician',
+        description: '`technician` → own only · `company` → own technicians only.',
+        security: bearerAuth,
+        parameters: [phoneParam('technicianPhone')],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianSpecialty' } }), ...protectedResponses },
+      },
+    },
+    '/api/v1/technician-specialties/specialty/{specialtyId}': {
+      get: {
+        tags: ['Technician Specialties'],
+        summary: 'Get technicians linked to a specialty',
+        security: bearerAuth,
+        parameters: [idParam('specialtyId')],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianSpecialty' } }), ...protectedResponses },
+      },
+    },
+    '/api/v1/technician-specialties/{technicianPhone}/{specialtyId}': {
       delete: {
         tags: ['Technician Specialties'],
         summary: 'Unlink technician from specialty',
         security: bearerAuth,
-        parameters: [phoneParam('phone'), idParam('specialtyId')],
+        parameters: [phoneParam('technicianPhone'), idParam('specialtyId')],
         responses: { ...r204, ...protectedResponses, ...r404 },
       },
     },
@@ -991,6 +1246,105 @@ export const openApiSpec = {
         description: 'Only `super_admin`.',
         security: bearerAuth,
         parameters: [idParam()],
+        responses: { ...r204, ...protectedResponses, ...r404 },
+      },
+    },
+
+    // ─── TECHNICIAN AVAILABILITY ──────────────────────────────────────────────
+    '/api/v1/technicians/{phone}/availability': {
+      get: {
+        tags: ['Technicians'],
+        summary: 'Get technician availability',
+        description: "Returns the technician's `available` flag and occupied time slots for a given date (non-cancelled appointments). Pass `?date=YYYY-MM-DD` to filter by date.",
+        security: bearerAuth,
+        parameters: [
+          phoneParam('phone'),
+          { name: 'date', in: 'query' as const, schema: { type: 'string', format: 'date', example: '2026-04-15' }, description: 'Filter occupied slots by date (YYYY-MM-DD)' },
+        ],
+        responses: {
+          ...r200({
+            type: 'object',
+            properties: {
+              technicianPhone: { type: 'string' },
+              available: { type: 'boolean', description: "Technician's manual availability flag" },
+              date: { type: 'string', format: 'date', nullable: true },
+              occupiedSlots: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    appointmentId: { type: 'integer' },
+                    startTime: { type: 'string', example: '10:00', nullable: true },
+                    status: { type: 'string' },
+                  },
+                },
+              },
+            },
+          }),
+          ...protectedResponses,
+          ...r404,
+        },
+      },
+    },
+
+    // ─── TECHNICIAN COVERAGE ZONES ────────────────────────────────────────────
+    '/api/v1/technician-coverage-zones': {
+      get: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'List all technician-zone assignments',
+        description: '`super_admin` → all · `company` → own technicians · `technician` → own zones.',
+        security: bearerAuth,
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianCoverageZone' } }), ...protectedResponses },
+      },
+      post: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'Assign technician to a coverage zone',
+        description: 'Only `company` and `super_admin`. The zone must belong to the company.',
+        security: bearerAuth,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['technicianPhone', 'coverageZoneId'],
+                properties: {
+                  technicianPhone: { type: 'string', example: '+1122334455' },
+                  coverageZoneId: { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+        responses: { ...r201({ $ref: '#/components/schemas/TechnicianCoverageZone' }), ...r400, ...protectedResponses },
+      },
+    },
+    '/api/v1/technician-coverage-zones/technician/{phone}': {
+      get: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'Get coverage zones for a technician',
+        description: 'Returns full zone details for each zone the technician is assigned to.',
+        security: bearerAuth,
+        parameters: [phoneParam('phone')],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/CoverageZone' } }), ...protectedResponses, ...r404 },
+      },
+    },
+    '/api/v1/technician-coverage-zones/zone/{id}': {
+      get: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'Get technicians assigned to a zone',
+        description: 'Returns full technician records for each technician assigned to the zone.',
+        security: bearerAuth,
+        parameters: [idParam()],
+        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Technician' } }), ...protectedResponses, ...r404 },
+      },
+    },
+    '/api/v1/technician-coverage-zones/{technicianPhone}/{zoneId}': {
+      delete: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'Remove technician from a coverage zone',
+        security: bearerAuth,
+        parameters: [phoneParam('technicianPhone'), idParam('zoneId')],
         responses: { ...r204, ...protectedResponses, ...r404 },
       },
     },

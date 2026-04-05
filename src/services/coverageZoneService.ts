@@ -1,14 +1,30 @@
+import { count, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { coverageZones } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+
+type Page = { limit: number; offset: number };
 
 export class CoverageZoneService {
-  static async getAll() {
-    return await db.select().from(coverageZones);
+  static async getAll(p?: Page) {
+    const q = db.select().from(coverageZones);
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
   }
 
-  static async getByCompany(companyPhone: string) {
-    return await db.select().from(coverageZones).where(eq(coverageZones.companyPhone, companyPhone));
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(coverageZones);
+    return Number(row?.value ?? 0);
+  }
+
+  static async getByCompany(companyPhone: string, p?: Page) {
+    const q = db.select().from(coverageZones).where(eq(coverageZones.companyPhone, companyPhone));
+    if (p) return q.limit(p.limit).offset(p.offset);
+    return q;
+  }
+
+  static async countByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(coverageZones).where(eq(coverageZones.companyPhone, companyPhone));
+    return Number(row?.value ?? 0);
   }
 
   static async getById(id: number) {

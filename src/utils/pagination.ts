@@ -39,24 +39,4 @@ export const createPaginatedResponse = <T>(
   };
 };
 
-// Search and filter utilities
-export interface SearchOptions {
-  search?: string;
-  filters?: Record<string, any>;
-}
-
-export const parseSearchFilters = (c: any): SearchOptions => {
-  const search = c.req.query('search');
-  const filters: Record<string, any> = {};
-
-  // Parse filter parameters (e.g., status=active, category=repair)
-  for (const [key, value] of Object.entries(c.req.queries())) {
-    if (key.startsWith('filter_')) {
-      const filterKey = key.replace('filter_', '');
-      filters[filterKey] = value;
-    }
-  }
-
-  return { search, filters };
-};
 

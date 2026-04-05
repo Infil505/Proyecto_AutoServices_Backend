@@ -109,21 +109,6 @@ export const paginationSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc')
 });
 
-// Search/Filter schemas
-export const appointmentFilterSchema = z.object({
-  status: appointmentStatusEnum.optional(),
-  technicianPhone: z.string().optional(),
-  customerPhone: z.string().optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional()
-});
-
-export const serviceFilterSchema = z.object({
-  category: z.string().optional(),
-  companyPhone: z.string().optional(),
-  active: z.boolean().optional()
-});
-
 // Technician coverage zone assignment (junction)
 export const technicianCoverageZoneSchema = z.object({
   technicianPhone: z.string().min(10).max(15),

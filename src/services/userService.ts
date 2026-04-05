@@ -54,16 +54,25 @@ export class UserService {
       companyPhone = tech[0]?.companyPhone;
     }
 
-    const payload = {
+    const now = Math.floor(Date.now() / 1000);
+    const basePayload = {
       id: user.id,
       type: user.type,
       phone: user.phone,
       ...(companyPhone ? { companyPhone } : {}),
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + parseExpiresIn(config.jwtExpiresIn)
+      iat: now,
     };
 
-    const token = await createJWT(payload, config.jwtSecret);
-    return { user, token };
+    const token = await createJWT(
+      { ...basePayload, tokenType: 'access', exp: now + parseExpiresIn(config.jwtExpiresIn) },
+      config.jwtSecret
+    );
+
+    const refreshToken = await createJWT(
+      { ...basePayload, tokenType: 'refresh', exp: now + parseExpiresIn(config.jwtRefreshExpiresIn) },
+      config.jwtSecret
+    );
+
+    return { user, token, refreshToken };
   }
 }

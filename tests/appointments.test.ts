@@ -1,8 +1,30 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+import { EventEmitter } from 'events';
 import { Hono } from 'hono';
 import { testClient } from 'hono/testing';
-import appointmentRoutes from '../src/routes/appointmentRoutes';
 import type { AppContext } from '../src/types';
+
+// Mock AppointmentService so DB-dependent calls return quickly (null = not found)
+mock.module('../src/services/appointmentService', () => ({
+  AppointmentService: {
+    getAll: mock(() => Promise.resolve([])),
+    countAll: mock(() => Promise.resolve(0)),
+    getByTechnician: mock(() => Promise.resolve([])),
+    countByTechnician: mock(() => Promise.resolve(0)),
+    getByCompany: mock(() => Promise.resolve([])),
+    countByCompany: mock(() => Promise.resolve(0)),
+    getById: mock(() => Promise.resolve(null)),
+    getFullById: mock(() => Promise.resolve(null)),
+    create: mock(() => Promise.resolve({ id: 1 })),
+    update: mock(() => Promise.resolve({ id: 1 })),
+    delete: mock(() => Promise.resolve()),
+    updateTechnicianStatus: mock(() => Promise.resolve({ id: 1 })),
+    updateAdminStatus: mock(() => Promise.resolve({ id: 1 })),
+    events: new EventEmitter(),
+  },
+}));
+
+const { default: appointmentRoutes } = await import('../src/routes/appointmentRoutes');
 
 /**
  * Builds a test app that injects a fake authenticated user so we

@@ -44,7 +44,7 @@ describe('createJWT / verifyJWT — round-trip', () => {
 
   it('el header del token declara HS256', async () => {
     const token = await createJWT({ id: 1, exp: now() + 3600 }, SECRET);
-    const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
+    const header = JSON.parse(Buffer.from(token.split('.')[0] ?? '', 'base64url').toString());
     expect(header.alg).toBe('HS256');
     expect(header.typ).toBe('JWT');
   });

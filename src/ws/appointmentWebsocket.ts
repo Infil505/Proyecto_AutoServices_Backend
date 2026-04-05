@@ -4,9 +4,10 @@ import { AppointmentService } from '../services/appointmentService.js';
 import { verifyJWT } from '../utils/jwt.js';
 
 const WS_PORT = Number(process.env.WS_PORT ?? 3001);
-const AUTH_TIMEOUT_MS = 5000;
+const AUTH_TIMEOUT_MS = 5_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
-type ClientInfo = { type: string; phone: string; id: number };
+type ClientInfo = { type: string; phone: string; id: number; isAlive: boolean };
 const clients = new Map<WebSocket, ClientInfo>();
 
 function broadcast(event: string, appointment: { companyPhone?: string | null; technicianPhone?: string | null; [key: string]: unknown }) {
@@ -28,8 +29,23 @@ export function startAppointmentWebsocket() {
     const secret = process.env.JWT_SECRET!;
     const wss = new WebSocketServer({ port: WS_PORT });
 
+    // ── Server-side heartbeat ────────────────────────────────────────────────
+    const heartbeatTimer = setInterval(() => {
+        for (const [ws, info] of clients) {
+            if (!info.isAlive) {
+                clients.delete(ws);
+                ws.terminate();
+                continue;
+            }
+            info.isAlive = false;
+            ws.ping();
+        }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    wss.on('close', () => clearInterval(heartbeatTimer));
+
+    // ── Connection handler ───────────────────────────────────────────────────
     wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
-        // Send auth challenge — client must reply with { type: "auth", token: "..." }
         ws.send(JSON.stringify({ type: 'auth_required' }));
 
         const authTimeout = setTimeout(() => {
@@ -38,6 +54,10 @@ export function startAppointmentWebsocket() {
             }
         }, AUTH_TIMEOUT_MS);
 
+        let authenticated = false;
+
+        // Single message handler — behavior changes via `authenticated` flag
+        // (avoids race condition from swapping handlers)
         const onMessage = async (raw: WebSocket.RawData) => {
             let payload: Record<string, unknown>;
             try {
@@ -47,54 +67,57 @@ export function startAppointmentWebsocket() {
                 return;
             }
 
-            // Handle auth message
-            if (payload?.type === 'auth') {
-                const token = typeof payload.token === 'string' ? payload.token : null;
-                const userPayload = token ? await verifyJWT(token, secret) : null;
-                if (!userPayload) {
-                    ws.close(1008, 'Unauthorized');
-                    return;
+            if (authenticated) {
+                if (payload?.type === 'ping') {
+                    ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
                 }
-
-                clearTimeout(authTimeout);
-                const clientInfo: ClientInfo = {
-                    type: userPayload.type as string,
-                    phone: userPayload.phone as string,
-                    id: userPayload.id as number,
-                };
-                clients.set(ws, clientInfo);
-
-                // Switch to normal message handler
-                ws.off('message', onMessage);
-                ws.on('message', (data: WebSocket.RawData) => {
-                    let msg: Record<string, unknown>;
-                    try {
-                        msg = typeof data === 'string' ? JSON.parse(data) : JSON.parse(data.toString());
-                    } catch {
-                        ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON payload' }));
-                        return;
-                    }
-                    if (msg?.type === 'ping') {
-                        ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
-                    }
-                });
-
-                ws.send(JSON.stringify({
-                    type: 'ws_connected',
-                    message: `Connected to appointment websocket at port ${WS_PORT}`,
-                    timestamp: new Date().toISOString(),
-                }));
                 return;
             }
 
-            ws.send(JSON.stringify({ type: 'error', message: 'Authentication required' }));
+            // Pre-auth: only accept auth messages
+            if (payload?.type !== 'auth') {
+                ws.send(JSON.stringify({ type: 'error', message: 'Authentication required' }));
+                return;
+            }
+
+            const token = typeof payload.token === 'string' ? payload.token : null;
+            const userPayload = token ? await verifyJWT(token, secret) : null;
+            if (!userPayload) {
+                ws.close(1008, 'Unauthorized');
+                return;
+            }
+
+            clearTimeout(authTimeout);
+            authenticated = true;
+
+            const clientInfo: ClientInfo = {
+                type: userPayload.type as string,
+                phone: userPayload.phone as string,
+                id: userPayload.id as number,
+                isAlive: true,
+            };
+            clients.set(ws, clientInfo);
+
+            ws.send(JSON.stringify({
+                type: 'ws_connected',
+                message: `Connected to appointment websocket at port ${WS_PORT}`,
+                timestamp: new Date().toISOString(),
+            }));
         };
 
         ws.on('message', onMessage);
+
+        // Mark client as alive on pong response
+        ws.on('pong', () => {
+            const info = clients.get(ws);
+            if (info) info.isAlive = true;
+        });
+
         ws.on('close', () => {
             clearTimeout(authTimeout);
             clients.delete(ws);
         });
+
         ws.on('error', () => {
             clearTimeout(authTimeout);
             clients.delete(ws);
@@ -111,6 +134,10 @@ export function startAppointmentWebsocket() {
 
     AppointmentService.events.on('appointment:deleted', (appointment) => {
         broadcast('appointment:deleted', appointment);
+    });
+
+    AppointmentService.events.on('appointment:assigned', (appointment) => {
+        broadcast('appointment:assigned', appointment);
     });
 
     console.log(`WebSocket server for appointments is running on ws://localhost:${WS_PORT}`);
