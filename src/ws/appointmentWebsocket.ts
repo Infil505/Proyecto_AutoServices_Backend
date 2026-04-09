@@ -4,7 +4,7 @@ import { AppointmentService } from '../services/appointmentService.js';
 import { verifyJWT } from '../utils/jwt.js';
 import { config } from '../config/index.js';
 
-const WS_PORT = Number(process.env.WS_PORT ?? 3001);
+const WS_PORT = config.wsPort;
 const AUTH_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 

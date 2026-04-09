@@ -1,6 +1,7 @@
 
 interface Config {
   port: number;
+  wsPort: number;
   nodeEnv: string;
   jwtSecret: string;
   jwtExpiresIn: string;
@@ -21,6 +22,7 @@ interface Config {
 
 const getConfig = (): Config => {
   const port = parseInt(process.env.PORT || '3000', 10);
+  const wsPort = parseInt(process.env.WS_PORT || '3001', 10);
   const nodeEnv = process.env.NODE_ENV || 'development';
   const jwtSecret = process.env.JWT_SECRET || 'default-secret-change-in-production';
   const jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
@@ -53,6 +55,7 @@ const getConfig = (): Config => {
 
   return {
     port,
+    wsPort,
     nodeEnv,
     jwtSecret,
     jwtExpiresIn,
