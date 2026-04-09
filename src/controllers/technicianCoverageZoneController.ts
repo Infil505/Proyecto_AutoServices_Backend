@@ -5,6 +5,7 @@ import { TechnicianService } from '../services/technicianService.js';
 import type { AppContext } from '../types.js';
 import { technicianCoverageZoneSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
 
@@ -41,12 +42,12 @@ router.get('/technician/:phone', async (c) => {
   const { page, limit, offset } = parsePagination(c);
 
   if (payload.type === 'technician' && phone !== payload.phone) {
-    return c.json({ error: 'Unauthorized' }, 403);
+    return c.json(Errors.UNAUTHORIZED, 403);
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(phone);
     if (!technician || technician.companyPhone !== payload.phone) {
-      return c.json({ error: 'Unauthorized' }, 403);
+      return c.json(Errors.UNAUTHORIZED, 403);
     }
   }
 
@@ -64,12 +65,12 @@ router.get('/zone/:id', async (c) => {
   const { page, limit, offset } = parsePagination(c);
 
   if (payload.type === 'technician') {
-    return c.json({ error: 'Unauthorized' }, 403);
+    return c.json(Errors.UNAUTHORIZED, 403);
   }
   if (payload.type === 'company') {
     const zone = await CoverageZoneService.getById(id);
     if (!zone || zone.companyPhone !== payload.phone) {
-      return c.json({ error: 'Unauthorized' }, 403);
+      return c.json(Errors.UNAUTHORIZED, 403);
     }
   }
 
@@ -85,18 +86,15 @@ router.post('/', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type === 'technician') {
-    return c.json({ error: 'Only companies can assign technicians to zones' }, 403);
+    return c.json(Errors.ZONE_ASSIGN_ONLY_COMPANY, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = technicianCoverageZoneSchema.safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const { technicianPhone, coverageZoneId } = result.data;
@@ -104,16 +102,16 @@ router.post('/', async (c) => {
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(technicianPhone);
     if (!technician || technician.companyPhone !== payload.phone) {
-      return c.json({ error: 'Technician does not belong to your company' }, 403);
+      return c.json(Errors.ZONE_TECHNICIAN_NOT_OWN, 403);
     }
     const zone = await CoverageZoneService.getById(coverageZoneId);
     if (!zone || zone.companyPhone !== payload.phone) {
-      return c.json({ error: 'Coverage zone does not belong to your company' }, 403);
+      return c.json(Errors.ZONE_NOT_OWN_COMPANY, 403);
     }
   }
 
   const existing = await TechnicianCoverageZoneService.getAssignment(technicianPhone, coverageZoneId);
-  if (existing) return c.json({ error: 'Technician is already assigned to this zone' }, 409);
+  if (existing) return c.json(Errors.ZONE_ASSIGNMENT_EXISTS, 409);
 
   const assignment = await TechnicianCoverageZoneService.create({ technicianPhone, coverageZoneId });
   return c.json(assignment, 201);
@@ -126,17 +124,17 @@ router.delete('/:technicianPhone/:zoneId', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type === 'technician') {
-    return c.json({ error: 'Only companies can remove zone assignments' }, 403);
+    return c.json(Errors.ZONE_REMOVE_ONLY_COMPANY, 403);
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(technicianPhone);
     if (!technician || technician.companyPhone !== payload.phone) {
-      return c.json({ error: 'Technician does not belong to your company' }, 403);
+      return c.json(Errors.ZONE_TECHNICIAN_NOT_OWN, 403);
     }
   }
 
   const existing = await TechnicianCoverageZoneService.getAssignment(technicianPhone, zoneId);
-  if (!existing) return c.json({ error: 'Assignment not found' }, 404);
+  if (!existing) return c.json(Errors.ZONE_ASSIGNMENT_NOT_FOUND, 404);
 
   await TechnicianCoverageZoneService.delete(technicianPhone, zoneId);
   return c.json({ message: 'Deleted' });

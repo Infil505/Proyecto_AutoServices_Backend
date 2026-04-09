@@ -3,6 +3,7 @@ import { ServiceService } from '../services/serviceService.js';
 import type { AppContext } from '../types.js';
 import { serviceSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
 
@@ -28,10 +29,10 @@ router.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
   const service = await ServiceService.getById(id);
-  if (!service) return c.json({ error: 'Not found' }, 404);
+  if (!service) return c.json(Errors.NOT_FOUND, 404);
 
-  if (payload.type === 'company' && service.companyPhone !== payload.phone) return c.json({ error: 'Unauthorized' }, 403);
-  if (payload.type === 'technician' && service.companyPhone !== payload.companyPhone) return c.json({ error: 'Unauthorized' }, 403);
+  if (payload.type === 'company' && service.companyPhone !== payload.phone) return c.json(Errors.UNAUTHORIZED, 403);
+  if (payload.type === 'technician' && service.companyPhone !== payload.companyPhone) return c.json(Errors.UNAUTHORIZED, 403);
 
   return c.json(service);
 });
@@ -39,15 +40,15 @@ router.get('/:id', async (c) => {
 router.post('/', async (c) => {
   const payload = c.var.user!;
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
-    return c.json({ error: 'Only companies and super_admins can create services' }, 403);
+    return c.json(Errors.SERVICE_CREATE_ONLY, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = serviceSchema.safeParse(body);
   if (!result.success) {
-    return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   return c.json(await ServiceService.create(result.data), 201);
@@ -57,19 +58,19 @@ router.put('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
 
-  if (payload.type === 'technician') return c.json({ error: 'Unauthorized' }, 403);
+  if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = serviceSchema.partial().safeParse(body);
   if (!result.success) {
-    return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   if (payload.type === 'company') {
     const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== payload.phone) return c.json({ error: 'Can only update own services' }, 403);
+    if (!service || service.companyPhone !== payload.phone) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
   }
 
   return c.json(await ServiceService.update(id, result.data));
@@ -79,10 +80,10 @@ router.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
 
-  if (payload.type === 'technician') return c.json({ error: 'Unauthorized' }, 403);
+  if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
   if (payload.type === 'company') {
     const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== payload.phone) return c.json({ error: 'Can only delete own services' }, 403);
+    if (!service || service.companyPhone !== payload.phone) return c.json(Errors.SERVICE_DELETE_OWN, 403);
   }
 
   await ServiceService.delete(id);

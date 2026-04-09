@@ -6,6 +6,7 @@ import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../vali
 import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
 import { config } from '../config/index.js';
 import { handleDbError } from '../utils/dbErrors.js';
+import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
 
@@ -15,14 +16,11 @@ const router = new Hono<AppContext>();
  */
 router.post('/register/company', async (c) => {
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = companyRegisterSchema.safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   try {
@@ -41,18 +39,15 @@ router.post('/register/company', async (c) => {
 router.post('/register/admin', async (c) => {
   const user = c.var.user;
   if (!user || user.type !== 'super_admin') {
-    return c.json({ error: 'Forbidden' }, 403);
+    return c.json(Errors.FORBIDDEN, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = adminRegisterSchema.safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const { phone, name, email, password } = result.data;
@@ -71,19 +66,16 @@ router.post('/register/admin', async (c) => {
  */
 router.post('/login', async (c) => {
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = loginSchema.safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const auth = await UserService.authenticate(result.data.phone, result.data.password);
   if (!auth) {
-    return c.json({ error: 'Invalid credentials' }, 401);
+    return c.json(Errors.INVALID_CREDENTIALS, 401);
   }
 
   return c.json({ user: auth.user, token: auth.token, refreshToken: auth.refreshToken });
@@ -96,12 +88,12 @@ router.post('/login', async (c) => {
 router.post('/refresh', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body?.refreshToken || typeof body.refreshToken !== 'string') {
-    return c.json({ error: 'refreshToken is required' }, 400);
+    return c.json(Errors.REFRESH_TOKEN_REQUIRED, 400);
   }
 
   const payload = await verifyJWT(body.refreshToken, config.jwtSecret);
   if (!payload || payload.tokenType !== 'refresh') {
-    return c.json({ error: 'Invalid or expired refresh token' }, 401);
+    return c.json(Errors.INVALID_REFRESH_TOKEN, 401);
   }
 
   const now = Math.floor(Date.now() / 1000);

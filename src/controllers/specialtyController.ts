@@ -3,6 +3,7 @@ import { SpecialtyService } from '../services/specialtyService.js';
 import { specialtySchema } from '../validation/schemas.js';
 import type { AppContext } from '../types.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
 
@@ -18,7 +19,7 @@ router.get('/', async (c) => {
 router.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const specialty = await SpecialtyService.getById(id);
-  if (!specialty) return c.json({ error: 'Not found' }, 404);
+  if (!specialty) return c.json(Errors.NOT_FOUND, 404);
   return c.json(specialty);
 });
 
@@ -26,14 +27,14 @@ router.post('/', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type !== 'super_admin') {
-    return c.json({ error: 'Only super_admins can create specialties' }, 403);
+    return c.json(Errors.SPECIALTY_CREATE_ONLY, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
   const result = specialtySchema.safeParse(body);
   if (!result.success) {
-    return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const specialty = await SpecialtyService.create(result.data);
@@ -45,14 +46,14 @@ router.put('/:id', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type !== 'super_admin') {
-    return c.json({ error: 'Only super_admins can update specialties' }, 403);
+    return c.json(Errors.SPECIALTY_UPDATE_ONLY, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
   const result = specialtySchema.partial().safeParse(body);
   if (!result.success) {
-    return c.json({ error: 'Validation failed', details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const specialty = await SpecialtyService.update(id, result.data);
@@ -62,12 +63,11 @@ router.put('/:id', async (c) => {
 router.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  
-  // Only super_admins can delete specialties
+
   if (payload.type !== 'super_admin') {
-    return c.json({ error: 'Only super_admins can delete specialties' }, 403);
+    return c.json(Errors.SPECIALTY_DELETE_ONLY, 403);
   }
-  
+
   await SpecialtyService.delete(id);
   return c.json({ message: 'Deleted' });
 });

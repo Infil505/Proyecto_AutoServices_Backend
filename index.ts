@@ -20,6 +20,7 @@ import technicianCoverageZoneRoutes from "./src/routes/technicianCoverageZoneRou
 import userRoutes from "./src/routes/userRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
+import { Errors } from "./src/utils/errors.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 import { EmailService } from "./src/services/emailService.js";
 import { db } from "./src/db/index.js";
@@ -47,12 +48,12 @@ function jwtMiddleware(secret: string) {
   return async (c: Context<AppContext>, next: Next) => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ error: "Missing authorization header" }, 401);
+      return c.json(Errors.MISSING_AUTH_HEADER, 401);
     }
     const token = authHeader.substring(7);
     const payload = await verifyJWT(token, secret);
     if (!payload || payload.tokenType === 'refresh') {
-      return c.json({ error: "Invalid token" }, 401);
+      return c.json(Errors.INVALID_TOKEN, 401);
     }
     c.set("user", payload as AppContext["Variables"]["user"]);
     await next();
@@ -126,7 +127,7 @@ app.post("/health/shutdown", async (c) => {
   if (entry && now < entry.resetAt) {
     if (entry.count >= 5) {
       console.warn(`[SHUTDOWN] Rate limited: ${ip} at ${new Date().toISOString()}`);
-      return c.json({ error: "Too many attempts" }, 429);
+      return c.json(Errors.TOO_MANY_ATTEMPTS, 429);
     }
     entry.count++;
   } else {
@@ -148,7 +149,7 @@ app.post("/health/shutdown", async (c) => {
 
   if (!userMatch || !passMatch) {
     console.warn(`[SHUTDOWN] Failed attempt from ${ip} at ${new Date().toISOString()}`);
-    return c.json({ error: "Invalid credentials" }, 401);
+    return c.json(Errors.INVALID_CREDENTIALS, 401);
   }
 
   console.warn(`[SHUTDOWN] Emergency shutdown triggered from ${ip} at ${new Date().toISOString()}`);
@@ -169,12 +170,12 @@ app.get("/", (c) =>
 // Global error handler
 app.onError((err, c) => {
   logger.error(`${c.req.method} ${c.req.path} — ${err.message}\n${err.stack}`);
-  return c.json({ error: "Internal Server Error" }, 500);
+  return c.json(Errors.INTERNAL_ERROR, 500);
 });
 
 // 404 handler
 app.notFound((c) => {
-  return c.json({ error: "Not Found" }, 404);
+  return c.json(Errors.NOT_FOUND, 404);
 });
 
 const server = Bun.serve({

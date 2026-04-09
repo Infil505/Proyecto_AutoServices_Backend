@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
 import { userSchema } from '../validation/schemas.js';
+import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
 
@@ -18,13 +19,13 @@ router.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
   const user = await UserService.getById(id);
-  if (!user) return c.json({ error: 'Not found' }, 404);
+  if (!user) return c.json(Errors.NOT_FOUND, 404);
 
   if (payload.type === 'technician' && (user.phone !== payload.phone || user.type !== 'technician')) {
-    return c.json({ error: 'Can only access own data' }, 403);
+    return c.json(Errors.USER_OWN_DATA, 403);
   }
   if (payload.type === 'company' && user.phone !== payload.phone) {
-    return c.json({ error: 'Can only access own business users' }, 403);
+    return c.json(Errors.USER_OWN_BUSINESS_ACCESS, 403);
   }
 
   return c.json(user);
@@ -34,18 +35,15 @@ router.post('/', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type !== 'super_admin') {
-    return c.json({ error: 'Only super_admins can create users' }, 403);
+    return c.json(Errors.USER_CREATE_ONLY_ADMIN, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = userSchema.safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const { password, ...rest } = result.data;
@@ -58,24 +56,21 @@ router.put('/:id', async (c) => {
   const payload = c.var.user!;
 
   const existing = await UserService.getById(id);
-  if (!existing) return c.json({ error: 'Not found' }, 404);
+  if (!existing) return c.json(Errors.NOT_FOUND, 404);
 
   if (payload.type === 'technician' && (existing.phone !== payload.phone || existing.type !== 'technician')) {
-    return c.json({ error: 'Can only update own data' }, 403);
+    return c.json(Errors.USER_OWN_UPDATE, 403);
   }
   if (payload.type === 'company' && existing.phone !== payload.phone) {
-    return c.json({ error: 'Can only update own business users' }, 403);
+    return c.json(Errors.USER_OWN_BUSINESS_UPDATE, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = userSchema.partial().safeParse(body);
   if (!result.success) {
-    return c.json({
-      error: 'Validation failed',
-      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
-    }, 400);
+    return c.json(validationErrorBody(result.error), 400);
   }
 
   const { password, ...rest } = result.data;
@@ -88,13 +83,13 @@ router.delete('/:id', async (c) => {
   const payload = c.var.user!;
 
   const existing = await UserService.getById(id);
-  if (!existing) return c.json({ error: 'Not found' }, 404);
+  if (!existing) return c.json(Errors.NOT_FOUND, 404);
 
   if (payload.type === 'technician' && (existing.phone !== payload.phone || existing.type !== 'technician')) {
-    return c.json({ error: 'Can only delete own data' }, 403);
+    return c.json(Errors.USER_OWN_DELETE, 403);
   }
   if (payload.type === 'company' && existing.phone !== payload.phone) {
-    return c.json({ error: 'Can only delete own business users' }, 403);
+    return c.json(Errors.USER_OWN_BUSINESS_DELETE, 403);
   }
 
   await UserService.delete(id);

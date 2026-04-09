@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import Redis from 'ioredis';
 import { config } from '../config/index.js';
+import { Errors } from '../utils/errors.js';
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000): Middlew
       'unknown';
 
     if (!(await isAllowed(ip, windowMs, maxRequests))) {
-      return c.json({ error: 'Too many requests' }, 429);
+      return c.json(Errors.TOO_MANY_REQUESTS, 429);
     }
 
     await next();
