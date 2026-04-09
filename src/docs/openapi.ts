@@ -1180,7 +1180,7 @@ export const openApiSpec = {
       get: {
         tags: ['Users'],
         summary: 'List users',
-        description: 'Only `super_admin`.',
+        description: 'Only `super_admin`. Returns a plain array (no pagination).',
         security: bearerAuth,
         responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/User' } }), ...protectedResponses },
       },
@@ -1292,9 +1292,18 @@ export const openApiSpec = {
       get: {
         tags: ['Technician Coverage Zones'],
         summary: 'List all technician-zone assignments',
-        description: '`super_admin` → all · `company` → own technicians · `technician` → own zones.',
+        description: '`super_admin` → all · `company` → own technicians · `technician` → own zones. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianCoverageZone' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/TechnicianCoverageZone' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Technician Coverage Zones'],
@@ -1323,20 +1332,38 @@ export const openApiSpec = {
       get: {
         tags: ['Technician Coverage Zones'],
         summary: 'Get coverage zones for a technician',
-        description: 'Returns full zone details for each zone the technician is assigned to.',
+        description: 'Returns full zone details for each zone the technician is assigned to. Returns a paginated response.',
         security: bearerAuth,
-        parameters: [phoneParam('phone')],
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/CoverageZone' } }), ...protectedResponses, ...r404 },
+        parameters: [phoneParam('phone'), ...paginationParams],
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/CoverageZone' } } } },
+            ],
+          }),
+          ...protectedResponses,
+          ...r404,
+        },
       },
     },
     '/api/v1/technician-coverage-zones/zone/{id}': {
       get: {
         tags: ['Technician Coverage Zones'],
         summary: 'Get technicians assigned to a zone',
-        description: 'Returns full technician records for each technician assigned to the zone.',
+        description: 'Returns full technician records for each technician assigned to the zone. Returns a paginated response.',
         security: bearerAuth,
-        parameters: [idParam()],
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/Technician' } }), ...protectedResponses, ...r404 },
+        parameters: [idParam(), ...paginationParams],
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Technician' } } } },
+            ],
+          }),
+          ...protectedResponses,
+          ...r404,
+        },
       },
     },
     '/api/v1/technician-coverage-zones/{technicianPhone}/{zoneId}': {
