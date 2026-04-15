@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { config } from '../config/index.js';
 import { db } from '../db/index.js';
 import { technicians, users } from '../db/schema.js';
@@ -26,6 +26,12 @@ export class TechnicianService {
 
   static async countByCompany(companyPhone: string): Promise<number> {
     const [row] = await db.select({ value: count() }).from(technicians).where(eq(technicians.companyPhone, companyPhone));
+    return Number(row?.value ?? 0);
+  }
+
+  static async countAvailableByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(technicians)
+      .where(and(eq(technicians.companyPhone, companyPhone), eq(technicians.available, true)));
     return Number(row?.value ?? 0);
   }
 

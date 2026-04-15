@@ -57,6 +57,22 @@ export const metricsMiddleware = () => {
   };
 };
 
+/** Returns a snapshot of in-process metrics for use by the admin controller. */
+export function getMetrics() {
+  return {
+    startTime: metrics.uptime,
+    requests: {
+      total: metrics.requests.total,
+      errors: metrics.errors.total,
+    },
+    responseTime: {
+      avg: metrics.responseTime.avg,
+      min: metrics.responseTime.min,
+      max: metrics.responseTime.max,
+    },
+  };
+}
+
 export const createMetricsApp = () => {
   const app = new Hono();
 

@@ -14,20 +14,20 @@ router.get('/', async (c) => {
 
   if (payload.type === 'technician') {
     const [data, total] = await Promise.all([
-      AppointmentService.getByTechnician(payload.phone, { limit, offset }),
+      AppointmentService.getByTechnicianWithDetails(payload.phone, { limit, offset }),
       AppointmentService.countByTechnician(payload.phone),
     ]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   if (payload.type === 'company') {
     const [data, total] = await Promise.all([
-      AppointmentService.getByCompany(payload.phone, { limit, offset }),
+      AppointmentService.getByCompanyWithDetails(payload.phone, { limit, offset }),
       AppointmentService.countByCompany(payload.phone),
     ]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   const [data, total] = await Promise.all([
-    AppointmentService.getAll({ limit, offset }),
+    AppointmentService.getAllWithDetails({ limit, offset }),
     AppointmentService.countAll(),
   ]);
   return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
@@ -36,7 +36,7 @@ router.get('/', async (c) => {
 router.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  const appointment = await AppointmentService.getById(id);
+  const appointment = await AppointmentService.getFullById(id);
   if (!appointment) return c.json(Errors.NOT_FOUND, 404);
 
   if (payload.type === 'technician' && appointment.technicianPhone !== payload.phone) {

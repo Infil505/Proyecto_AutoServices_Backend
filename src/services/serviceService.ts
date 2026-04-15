@@ -1,4 +1,4 @@
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { services } from '../db/schema.js';
 
@@ -24,6 +24,12 @@ export class ServiceService {
 
   static async countByCompany(companyPhone: string): Promise<number> {
     const [row] = await db.select({ value: count() }).from(services).where(eq(services.companyPhone, companyPhone));
+    return Number(row?.value ?? 0);
+  }
+
+  static async countActiveByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db.select({ value: count() }).from(services)
+      .where(and(eq(services.companyPhone, companyPhone), eq(services.active, true)));
     return Number(row?.value ?? 0);
   }
 

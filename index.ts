@@ -18,6 +18,9 @@ import technicianRoutes from "./src/routes/technicianRoutes.js";
 import technicianSpecialtyRoutes from "./src/routes/technicianSpecialtyRoutes.js";
 import technicianCoverageZoneRoutes from "./src/routes/technicianCoverageZoneRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
+import statsRoutes from "./src/routes/statsRoutes.js";
+import adminRoutes from "./src/routes/adminRoutes.js";
+import publicRoutes from "./src/routes/publicRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
 import { Errors } from "./src/utils/errors.js";
@@ -75,22 +78,42 @@ app.use("*", cors({ origin: config.corsOrigins }));
 // Rate limiting
 app.use("*", rateLimit(config.rateLimitMax, config.rateLimitWindowMs));
 
+// Stricter rate limit for auth endpoints (20 req / 15 min per IP) to mitigate brute force
+const authRateLimit = rateLimit(20, config.rateLimitWindowMs);
+app.use("/api/v1/auth", authRateLimit);
+app.use("/api/v1/auth/*", authRateLimit);
+
+// Public routes — no JWT required
+app.route("/api/v1/public", publicRoutes);
+
 // Public auth routes
 app.route("/api/v1/auth", authRoutes);
 
-// JWT middleware for protected routes
+// JWT middleware for protected routes.
+// Each prefix is registered twice: once for the collection endpoint (no trailing
+// segment) and once for sub-resource paths, because Hono's `/*` wildcard does
+// not match the base path without a trailing slash.
 const jwtProtect = jwtMiddleware(config.jwtSecret);
-app.use("/api/v1/appointments/*", jwtProtect);
-app.use("/api/v1/companies/*", jwtProtect);
-app.use("/api/v1/customers/*", jwtProtect);
-app.use("/api/v1/services/*", jwtProtect);
-app.use("/api/v1/service-specialties/*", jwtProtect);
-app.use("/api/v1/specialties/*", jwtProtect);
-app.use("/api/v1/technicians/*", jwtProtect);
-app.use("/api/v1/technician-specialties/*", jwtProtect);
-app.use("/api/v1/coverage-zones/*", jwtProtect);
-app.use("/api/v1/technician-coverage-zones/*", jwtProtect);
-app.use("/api/v1/users/*", jwtProtect);
+const protectedPrefixes = [
+  "/api/v1/appointments",
+  "/api/v1/companies",
+  "/api/v1/customers",
+  "/api/v1/services",
+  "/api/v1/service-specialties",
+  "/api/v1/specialties",
+  "/api/v1/technicians",
+  "/api/v1/technician-specialties",
+  "/api/v1/coverage-zones",
+  "/api/v1/technician-coverage-zones",
+  "/api/v1/users",
+  "/api/v1/stats",
+  "/api/v1/admin",
+] as const;
+
+for (const prefix of protectedPrefixes) {
+  app.use(prefix, jwtProtect);
+  app.use(`${prefix}/*`, jwtProtect);
+}
 
 // Protected routes
 app.route("/api/v1/appointments", appointmentRoutes);
@@ -104,6 +127,8 @@ app.route("/api/v1/technician-specialties", technicianSpecialtyRoutes);
 app.route("/api/v1/coverage-zones", coverageZoneRoutes);
 app.route("/api/v1/technician-coverage-zones", technicianCoverageZoneRoutes);
 app.route("/api/v1/users", userRoutes);
+app.route("/api/v1/stats", statsRoutes);
+app.route("/api/v1/admin", adminRoutes);
 
 // Health check
 app.get("/health", (c) =>

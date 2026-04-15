@@ -5,8 +5,41 @@ import { appointments, customers, companies, technicians, services } from '../db
 
 type Page = { limit: number; offset: number };
 
+/** Flatten a joined row into a single appointment object with optional nested entities. */
+function flattenRow(row: {
+  appointment: typeof appointments.$inferSelect;
+  customer: typeof customers.$inferSelect | null;
+  technician: typeof technicians.$inferSelect | null;
+  service: typeof services.$inferSelect | null;
+}) {
+  return {
+    ...row.appointment,
+    customer: row.customer ?? undefined,
+    technician: row.technician ?? undefined,
+    service: row.service ?? undefined,
+  };
+}
+
+const detailSelect = {
+  appointment: appointments,
+  customer: customers,
+  technician: technicians,
+  service: services,
+} as const;
+
+function baseDetailQuery() {
+  return db
+    .select(detailSelect)
+    .from(appointments)
+    .leftJoin(customers, eq(appointments.customerPhone, customers.phone))
+    .leftJoin(technicians, eq(appointments.technicianPhone, technicians.phone))
+    .leftJoin(services, eq(appointments.serviceId, services.id));
+}
+
 export class AppointmentService {
   static events = new EventEmitter();
+
+  // ── Flat (legacy, internal) ──────────────────────────────────────────────────
 
   static async getAll(p?: Page) {
     const q = db.select().from(appointments);
@@ -41,6 +74,36 @@ export class AppointmentService {
     return Number(row?.value ?? 0);
   }
 
+  static async countCompletedByCompany(companyPhone: string): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(appointments)
+      .where(and(eq(appointments.companyPhone, companyPhone), eq(appointments.status, 'completed')));
+    return Number(row?.value ?? 0);
+  }
+
+  // ── With related data (joined) ───────────────────────────────────────────────
+
+  static async getAllWithDetails(p?: Page) {
+    const q = baseDetailQuery();
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(flattenRow);
+  }
+
+  static async getByCompanyWithDetails(companyPhone: string, p?: Page) {
+    const q = baseDetailQuery().where(eq(appointments.companyPhone, companyPhone));
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(flattenRow);
+  }
+
+  static async getByTechnicianWithDetails(technicianPhone: string, p?: Page) {
+    const q = baseDetailQuery().where(eq(appointments.technicianPhone, technicianPhone));
+    const rows = p ? await q.limit(p.limit).offset(p.offset) : await q;
+    return rows.map(flattenRow);
+  }
+
+  // ── Single record ────────────────────────────────────────────────────────────
+
   static async getByTechnicianAndDate(technicianPhone: string, date: string) {
     return await db.select().from(appointments).where(
       and(
@@ -55,6 +118,28 @@ export class AppointmentService {
     const result = await db.select().from(appointments).where(eq(appointments.id, id));
     return result[0];
   }
+
+  static async getFullById(id: number) {
+    const result = await db
+      .select({ appointment: appointments, customer: customers, company: companies, technician: technicians, service: services })
+      .from(appointments)
+      .leftJoin(customers, eq(appointments.customerPhone, customers.phone))
+      .leftJoin(companies, eq(appointments.companyPhone, companies.phone))
+      .leftJoin(technicians, eq(appointments.technicianPhone, technicians.phone))
+      .leftJoin(services, eq(appointments.serviceId, services.id))
+      .where(eq(appointments.id, id));
+    const row = result[0];
+    if (!row) return undefined;
+    return {
+      ...row.appointment,
+      customer: row.customer ?? undefined,
+      technician: row.technician ?? undefined,
+      service: row.service ?? undefined,
+      company: row.company ?? undefined,
+    };
+  }
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
 
   static async create(data: typeof appointments.$inferInsert) {
     const result = await db.insert(appointments).values(data).returning();
@@ -88,18 +173,6 @@ export class AppointmentService {
     const existing = await AppointmentService.getById(id);
     await db.delete(appointments).where(eq(appointments.id, id));
     AppointmentService.events.emit('appointment:deleted', existing ?? { id });
-  }
-
-  static async getFullById(id: number) {
-    const result = await db
-      .select({ appointment: appointments, customer: customers, company: companies, technician: technicians, service: services })
-      .from(appointments)
-      .leftJoin(customers, eq(appointments.customerPhone, customers.phone))
-      .leftJoin(companies, eq(appointments.companyPhone, companies.phone))
-      .leftJoin(technicians, eq(appointments.technicianPhone, technicians.phone))
-      .leftJoin(services, eq(appointments.serviceId, services.id))
-      .where(eq(appointments.id, id));
-    return result[0];
   }
 
   static async updateTechnicianStatus(id: number, estatusTecnico: boolean) {
