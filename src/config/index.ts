@@ -18,6 +18,7 @@ interface Config {
   resendFromEmail: string;
   redisUrl: string;
   metricsApiKey: string;
+  trustProxy: boolean;
 }
 
 const getConfig = (): Config => {
@@ -39,18 +40,21 @@ const getConfig = (): Config => {
   const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@autoservices.com';
   const redisUrl = process.env.REDIS_URL || '';
   const metricsApiKey = process.env.METRICS_API_KEY || '';
+  const trustProxy = process.env.TRUST_PROXY !== 'false';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
-    if (!databaseUrl) {
-      throw new Error('DATABASE_URL environment variable is required');
-    }
-    if (!jwtSecret || jwtSecret === 'default-secret-change-in-production') {
+    if (!databaseUrl) throw new Error('DATABASE_URL environment variable is required');
+    if (!jwtSecret || jwtSecret === 'default-secret-change-in-production')
       throw new Error('JWT_SECRET environment variable must be set and not use default value');
-    }
-    if (!process.env.SHUTDOWN_PASSWORD || process.env.SHUTDOWN_PASSWORD === 'change_this_password') {
+    if (!process.env.SHUTDOWN_PASSWORD || process.env.SHUTDOWN_PASSWORD === 'change_this_password')
       throw new Error('SHUTDOWN_PASSWORD environment variable must be set and not use default value');
-    }
+    if (!process.env.JWT_EXPIRES_IN)
+      throw new Error('JWT_EXPIRES_IN environment variable is required in production');
+    if (!process.env.JWT_REFRESH_EXPIRES_IN)
+      throw new Error('JWT_REFRESH_EXPIRES_IN environment variable is required in production');
+    if (!metricsApiKey)
+      throw new Error('METRICS_API_KEY environment variable is required in production');
   }
 
   return {
@@ -72,6 +76,7 @@ const getConfig = (): Config => {
     resendFromEmail,
     redisUrl,
     metricsApiKey,
+    trustProxy,
   };
 };
 

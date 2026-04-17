@@ -18,7 +18,8 @@ router.get('/', async (c) => {
     return c.json(createPaginatedResponse(technician ? [technician] : [], technician ? 1 : 0, { page, limit, offset, sortOrder: 'desc' }));
   }
   if (payload.type === 'company') {
-    const [data, total] = await Promise.all([TechnicianService.getByCompany(payload.phone, { limit, offset }), TechnicianService.countByCompany(payload.phone)]);
+    const cp = payload.companyPhone ?? payload.phone;
+    const [data, total] = await Promise.all([TechnicianService.getByCompany(cp, { limit, offset }), TechnicianService.countByCompany(cp)]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   const [data, total] = await Promise.all([TechnicianService.getAll({ limit, offset }), TechnicianService.countAll()]);
@@ -35,7 +36,7 @@ router.get('/:phone/availability', async (c) => {
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.TECHNICIAN_OWN_COMPANY_ACCESS, 403);
     }
   }
@@ -66,7 +67,7 @@ router.get('/:phone', async (c) => {
   if (!technician) return c.json(Errors.NOT_FOUND, 404);
 
   if (payload.type === 'technician' && payload.phone !== phone) return c.json(Errors.TECHNICIAN_OWN_DATA, 403);
-  if (payload.type === 'company' && technician.companyPhone !== payload.phone) return c.json(Errors.TECHNICIAN_OWN_COMPANY_ACCESS, 403);
+  if (payload.type === 'company' && technician.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.TECHNICIAN_OWN_COMPANY_ACCESS, 403);
 
   return c.json(technician);
 });
@@ -85,7 +86,7 @@ router.post('/', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  const companyPhone = payload.type === 'company' ? payload.phone : result.data.companyPhone;
+  const companyPhone = payload.type === 'company' ? (payload.companyPhone ?? payload.phone) : result.data.companyPhone;
   if (!companyPhone) return c.json(Errors.TECHNICIAN_COMPANY_PHONE_REQUIRED, 400);
 
   try {
@@ -103,7 +104,7 @@ router.put('/:phone', async (c) => {
   if (payload.type === 'technician' && payload.phone !== phone) return c.json(Errors.TECHNICIAN_OWN_UPDATE, 403);
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== payload.phone) return c.json(Errors.TECHNICIAN_OWN_COMPANY_UPDATE, 403);
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.TECHNICIAN_OWN_COMPANY_UPDATE, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -122,7 +123,7 @@ router.delete('/:phone', async (c) => {
   if (payload.type === 'technician' && payload.phone !== phone) return c.json(Errors.TECHNICIAN_OWN_DELETE, 403);
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== payload.phone) return c.json(Errors.TECHNICIAN_OWN_COMPANY_DELETE, 403);
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.TECHNICIAN_OWN_COMPANY_DELETE, 403);
   }
 
   await TechnicianService.delete(phone);

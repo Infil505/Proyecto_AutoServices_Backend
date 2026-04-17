@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
 import { userSchema } from '../validation/schemas.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -16,7 +17,8 @@ router.get('/', async (c) => {
 });
 
 router.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
   const user = await UserService.getById(id);
   if (!user) return c.json(Errors.NOT_FOUND, 404);
@@ -52,7 +54,8 @@ router.post('/', async (c) => {
 });
 
 router.put('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   const existing = await UserService.getById(id);
@@ -79,7 +82,8 @@ router.put('/:id', async (c) => {
 });
 
 router.delete('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   const existing = await UserService.getById(id);

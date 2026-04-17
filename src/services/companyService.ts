@@ -40,7 +40,7 @@ export class CompanyService {
       }).returning();
       await tx.insert(users).values({
         type: 'company', phone: data.phone, name: data.name,
-        email: data.email, passwordHash: hashedPassword,
+        email: data.email, companyPhone: data.phone, passwordHash: hashedPassword,
       });
       return company;
     });

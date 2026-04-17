@@ -55,11 +55,14 @@ async function isAllowed(ip: string, windowMs: number, maxRequests: number): Pro
 
 export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000): MiddlewareHandler => {
   return async (c, next) => {
-    const ip =
-      c.req.header('CF-Connecting-IP') ||
-      c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
-      c.req.header('X-Real-IP') ||
-      'unknown';
+    // Only trust proxy headers when TRUST_PROXY=true (i.e. behind Cloudflare/Nginx)
+    // Without a proxy that strips/sets these headers, clients can spoof their IP
+    const ip = config.trustProxy
+      ? (c.req.header('CF-Connecting-IP') ||
+         c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
+         c.req.header('X-Real-IP') ||
+         'unknown')
+      : 'unknown';
 
     if (!(await isAllowed(ip, windowMs, maxRequests))) {
       return c.json(Errors.TOO_MANY_REQUESTS, 429);

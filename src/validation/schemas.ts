@@ -22,6 +22,14 @@ export const adminRegisterSchema = z.object({
   password: passwordField,
 });
 
+// Company admin creation by super_admin for an existing company
+export const companyAdminSchema = z.object({
+  phone: phoneField,
+  name: z.string().min(2).max(100),
+  email: z.string().email().optional(),
+  password: passwordField,
+});
+
 export const loginSchema = z.object({
   phone: z.string().min(10).max(15),
   password: z.string().min(1)

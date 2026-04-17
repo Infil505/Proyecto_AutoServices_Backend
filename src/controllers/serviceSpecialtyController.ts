@@ -3,6 +3,7 @@ import { ServiceSpecialtyService } from '../services/serviceSpecialtyService.js'
 import { serviceSpecialtySchema } from '../validation/schemas.js';
 import type { AppContext } from '../types.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -17,13 +18,15 @@ router.get('/', async (c) => {
 });
 
 router.get('/service/:serviceId', async (c) => {
-  const serviceId = parseInt(c.req.param('serviceId'));
+  const serviceId = parseIntParam(c.req.param('serviceId'));
+  if (!serviceId) return c.json(Errors.NOT_FOUND, 404);
   const serviceSpecialties = await ServiceSpecialtyService.getByServiceId(serviceId);
   return c.json(serviceSpecialties);
 });
 
 router.get('/specialty/:specialtyId', async (c) => {
-  const specialtyId = parseInt(c.req.param('specialtyId'));
+  const specialtyId = parseIntParam(c.req.param('specialtyId'));
+  if (!specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const serviceSpecialties = await ServiceSpecialtyService.getBySpecialtyId(specialtyId);
   return c.json(serviceSpecialties);
 });
@@ -47,8 +50,9 @@ router.post('/', async (c) => {
 });
 
 router.delete('/:serviceId/:specialtyId', async (c) => {
-  const serviceId = parseInt(c.req.param('serviceId'));
-  const specialtyId = parseInt(c.req.param('specialtyId'));
+  const serviceId = parseIntParam(c.req.param('serviceId'));
+  const specialtyId = parseIntParam(c.req.param('specialtyId'));
+  if (!serviceId || !specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company' && payload.type !== 'super_admin') {

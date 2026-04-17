@@ -109,6 +109,17 @@ export const users = pgTable('users', {
   phone: text('phone').notNull(),
   name: text('name').notNull(),
   email: text('email'),
+  companyPhone: text('company_phone').references(() => companies.phone, { onDelete: 'cascade' }),
   passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+export const sessions = pgTable('sessions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  jti: text('jti').notNull().unique(),
+  tokenType: text('token_type').notNull(), // 'access' | 'refresh'
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });

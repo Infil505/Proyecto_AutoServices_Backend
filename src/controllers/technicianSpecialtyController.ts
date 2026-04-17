@@ -4,6 +4,7 @@ import { TechnicianService } from '../services/technicianService.js';
 import { technicianSpecialtySchema } from '../validation/schemas.js';
 import type { AppContext } from '../types.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -26,7 +27,7 @@ router.get('/technician/:technicianPhone', async (c) => {
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(technicianPhone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.TECHNICIAN_SPECIALTY_VIEW_OWN_COMPANY, 403);
     }
   }
@@ -36,7 +37,8 @@ router.get('/technician/:technicianPhone', async (c) => {
 });
 
 router.get('/specialty/:specialtyId', async (c) => {
-  const specialtyId = parseInt(c.req.param('specialtyId'));
+  const specialtyId = parseIntParam(c.req.param('specialtyId'));
+  if (!specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const technicianSpecialties = await TechnicianSpecialtyService.getBySpecialtyId(specialtyId);
   return c.json(technicianSpecialties);
 });
@@ -57,7 +59,7 @@ router.post('/', async (c) => {
 
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(result.data.technicianPhone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.TECHNICIAN_SPECIALTY_OWN_COMPANY, 403);
     }
   }
@@ -68,7 +70,8 @@ router.post('/', async (c) => {
 
 router.delete('/:technicianPhone/:specialtyId', async (c) => {
   const technicianPhone = c.req.param('technicianPhone');
-  const specialtyId = parseInt(c.req.param('specialtyId'));
+  const specialtyId = parseIntParam(c.req.param('specialtyId'));
+  if (!specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
@@ -77,7 +80,7 @@ router.delete('/:technicianPhone/:specialtyId', async (c) => {
 
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(technicianPhone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.TECHNICIAN_SPECIALTY_OWN_COMPANY, 403);
     }
   }

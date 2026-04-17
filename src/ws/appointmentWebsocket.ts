@@ -2,13 +2,20 @@ import { IncomingMessage } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { AppointmentService } from '../services/appointmentService.js';
 import { verifyJWT } from '../utils/jwt.js';
+import { isBlacklisted } from '../utils/tokenBlacklist.js';
 import { config } from '../config/index.js';
 
 const WS_PORT = config.wsPort;
 const AUTH_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-type ClientInfo = { type: string; phone: string; id: number; isAlive: boolean };
+type ClientInfo = {
+  type: string;
+  phone: string;
+  companyPhone?: string;
+  id: number;
+  isAlive: boolean;
+};
 const clients = new Map<WebSocket, ClientInfo>();
 
 function broadcast(event: string, appointment: { companyPhone?: string | null; technicianPhone?: string | null; [key: string]: unknown }) {
@@ -18,9 +25,10 @@ function broadcast(event: string, appointment: { companyPhone?: string | null; t
             clients.delete(ws);
             continue;
         }
+        const effectiveCompanyPhone = user.companyPhone ?? user.phone;
         const canReceive =
             user.type === 'super_admin' ||
-            (user.type === 'company' && appointment.companyPhone === user.phone) ||
+            (user.type === 'company' && appointment.companyPhone === effectiveCompanyPhone) ||
             (user.type === 'technician' && appointment.technicianPhone === user.phone);
         if (canReceive) ws.send(message);
     }
@@ -47,9 +55,15 @@ export function startAppointmentWebsocket() {
 
     // ── Connection handler ───────────────────────────────────────────────────
     wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-        // Origin validation — only allow configured CORS origins
         const origin = req.headers.origin;
-        if (origin && !config.corsOrigins.includes(origin)) {
+
+        // In production require a valid Origin; in dev allow missing Origin (CLI/tools)
+        if (config.nodeEnv === 'production') {
+            if (!origin || !config.corsOrigins.includes(origin)) {
+                ws.close(1008, 'Origin not allowed');
+                return;
+            }
+        } else if (origin && !config.corsOrigins.includes(origin)) {
             ws.close(1008, 'Origin not allowed');
             return;
         }
@@ -65,7 +79,6 @@ export function startAppointmentWebsocket() {
         let authenticated = false;
 
         // Single message handler — behavior changes via `authenticated` flag
-        // (avoids race condition from swapping handlers)
         const onMessage = async (raw: WebSocket.RawData) => {
             let payload: Record<string, unknown>;
             try {
@@ -90,8 +103,14 @@ export function startAppointmentWebsocket() {
 
             const token = typeof payload.token === 'string' ? payload.token : null;
             const userPayload = token ? await verifyJWT(token, secret) : null;
-            if (!userPayload) {
+
+            if (!userPayload || userPayload.tokenType !== 'access') {
                 ws.close(1008, 'Unauthorized');
+                return;
+            }
+
+            if (userPayload.jti && await isBlacklisted(userPayload.jti as string)) {
+                ws.close(1008, 'Token revoked');
                 return;
             }
 
@@ -101,6 +120,7 @@ export function startAppointmentWebsocket() {
             const clientInfo: ClientInfo = {
                 type: userPayload.type as string,
                 phone: userPayload.phone as string,
+                companyPhone: userPayload.companyPhone as string | undefined,
                 id: userPayload.id as number,
                 isAlive: true,
             };
@@ -115,7 +135,6 @@ export function startAppointmentWebsocket() {
 
         ws.on('message', onMessage);
 
-        // Mark client as alive on pong response
         ws.on('pong', () => {
             const info = clients.get(ws);
             if (info) info.isAlive = true;

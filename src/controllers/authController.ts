@@ -3,8 +3,11 @@ import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
 import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
+import { randomUUID } from 'crypto';
 import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
-import { blacklistToken } from '../utils/tokenBlacklist.js';
+import { blacklistToken, isBlacklisted } from '../utils/tokenBlacklist.js';
+import { SessionService } from '../services/sessionService.js';
+import { checkLoginAllowed, recordFailedAttempt, resetLoginAttempts } from '../utils/loginLimiter.js';
 import { config } from '../config/index.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
@@ -74,11 +77,20 @@ router.post('/login', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  const auth = await UserService.authenticate(result.data.phone, result.data.password);
+  const { phone } = result.data;
+
+  const lockCheck = checkLoginAllowed(phone);
+  if (!lockCheck.allowed) {
+    return c.json(Errors.LOGIN_TOO_MANY_ATTEMPTS, 429);
+  }
+
+  const auth = await UserService.authenticate(phone, result.data.password);
   if (!auth) {
+    recordFailedAttempt(phone);
     return c.json(Errors.INVALID_CREDENTIALS, 401);
   }
 
+  resetLoginAttempts(phone);
   return c.json({ user: auth.user, token: auth.token, refreshToken: auth.refreshToken });
 });
 
@@ -97,19 +109,29 @@ router.post('/refresh', async (c) => {
     return c.json(Errors.INVALID_REFRESH_TOKEN, 401);
   }
 
+  if (payload.jti && await isBlacklisted(payload.jti as string)) {
+    return c.json(Errors.INVALID_REFRESH_TOKEN, 401);
+  }
+
   const now = Math.floor(Date.now() / 1000);
+  const accessExp = now + parseExpiresIn(config.jwtExpiresIn);
+  const accessJti = randomUUID();
+
   const token = await createJWT(
     {
       id: payload.id,
       type: payload.type,
       phone: payload.phone,
       ...(payload.companyPhone ? { companyPhone: payload.companyPhone } : {}),
+      jti: accessJti,
       tokenType: 'access',
       iat: now,
-      exp: now + parseExpiresIn(config.jwtExpiresIn),
+      exp: accessExp,
     },
     config.jwtSecret
   );
+
+  await SessionService.save(payload.id as number, accessJti, 'access', accessExp);
 
   return c.json({ token });
 });
@@ -124,14 +146,14 @@ router.post('/logout', async (c) => {
   if (!user) return c.json(Errors.MISSING_AUTH_HEADER, 401);
 
   // Revoke the access token that was used to authenticate this request.
-  blacklistToken(user.jti, user.exp);
+  await blacklistToken(user.jti);
 
   // Optionally revoke the refresh token if the client sends it.
   const body = await c.req.json().catch(() => null);
   if (body?.refreshToken && typeof body.refreshToken === 'string') {
     const refreshPayload = await verifyJWT(body.refreshToken, config.jwtSecret);
-    if (refreshPayload?.jti && refreshPayload?.exp && refreshPayload.tokenType === 'refresh') {
-      blacklistToken(refreshPayload.jti as string, refreshPayload.exp as number);
+    if (refreshPayload?.jti && refreshPayload.tokenType === 'refresh') {
+      await blacklistToken(refreshPayload.jti as string);
     }
   }
 

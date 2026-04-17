@@ -4,6 +4,7 @@ import { PdfService } from '../services/pdfService.js';
 import type { AppContext } from '../types.js';
 import { appointmentSchema, technicianStatusSchema, adminStatusSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -20,9 +21,10 @@ router.get('/', async (c) => {
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   if (payload.type === 'company') {
+    const cp = payload.companyPhone ?? payload.phone;
     const [data, total] = await Promise.all([
-      AppointmentService.getByCompanyWithDetails(payload.phone, { limit, offset }),
-      AppointmentService.countByCompany(payload.phone),
+      AppointmentService.getByCompanyWithDetails(cp, { limit, offset }),
+      AppointmentService.countByCompany(cp),
     ]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
@@ -34,7 +36,8 @@ router.get('/', async (c) => {
 });
 
 router.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
   const fullData = await AppointmentService.getFullById(id);
   if (!fullData) return c.json(Errors.NOT_FOUND, 404);
@@ -42,7 +45,7 @@ router.get('/:id', async (c) => {
   if (payload.type === 'technician' && fullData.appointment.technicianPhone !== payload.phone) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
-  if (payload.type === 'company' && fullData.appointment.companyPhone !== payload.phone) {
+  if (payload.type === 'company' && fullData.appointment.companyPhone !== (payload.companyPhone ?? payload.phone)) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
 
@@ -69,11 +72,19 @@ router.post('/', async (c) => {
 });
 
 router.put('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
     return c.json(Errors.APPOINTMENT_UPDATE_ONLY, 403);
+  }
+
+  if (payload.type === 'company') {
+    const existing = await AppointmentService.getById(id);
+    if (!existing) return c.json(Errors.NOT_FOUND, 404);
+    if (existing.companyPhone !== (payload.companyPhone ?? payload.phone))
+      return c.json(Errors.UNAUTHORIZED, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -89,11 +100,19 @@ router.put('/:id', async (c) => {
 });
 
 router.delete('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company' && payload.type !== 'super_admin') {
     return c.json(Errors.APPOINTMENT_DELETE_ONLY, 403);
+  }
+
+  if (payload.type === 'company') {
+    const existing = await AppointmentService.getById(id);
+    if (!existing) return c.json(Errors.NOT_FOUND, 404);
+    if (existing.companyPhone !== (payload.companyPhone ?? payload.phone))
+      return c.json(Errors.UNAUTHORIZED, 403);
   }
 
   await AppointmentService.delete(id);
@@ -101,7 +120,8 @@ router.delete('/:id', async (c) => {
 });
 
 router.patch('/:id/status/tecnico', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'technician') {
@@ -126,7 +146,8 @@ router.patch('/:id/status/tecnico', async (c) => {
 });
 
 router.patch('/:id/status/administrador', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company') {
@@ -143,7 +164,7 @@ router.patch('/:id/status/administrador', async (c) => {
 
   const appointment = await AppointmentService.getById(id);
   if (!appointment) return c.json(Errors.NOT_FOUND, 404);
-  if (appointment.companyPhone !== payload.phone) {
+  if (appointment.companyPhone !== (payload.companyPhone ?? payload.phone)) {
     return c.json(Errors.APPOINTMENT_NO_PERMISSION, 403);
   }
 
@@ -151,7 +172,8 @@ router.patch('/:id/status/administrador', async (c) => {
 });
 
 router.get('/:id/pdf', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   const appointment = await AppointmentService.getById(id);
@@ -160,7 +182,7 @@ router.get('/:id/pdf', async (c) => {
   if (payload.type === 'technician' && appointment.technicianPhone !== payload.phone) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
-  if (payload.type === 'company' && appointment.companyPhone !== payload.phone) {
+  if (payload.type === 'company' && appointment.companyPhone !== (payload.companyPhone ?? payload.phone)) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
   if (!appointment.estatusTecnico || !appointment.estatusAdministrador) {

@@ -3,6 +3,7 @@ import { ServiceService } from '../services/serviceService.js';
 import type { AppContext } from '../types.js';
 import { serviceSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -18,7 +19,8 @@ router.get('/', async (c) => {
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   if (payload.type === 'company') {
-    const [data, total] = await Promise.all([ServiceService.getByCompany(payload.phone, { limit, offset }), ServiceService.countByCompany(payload.phone)]);
+    const cp = payload.companyPhone ?? payload.phone;
+    const [data, total] = await Promise.all([ServiceService.getByCompany(cp, { limit, offset }), ServiceService.countByCompany(cp)]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   const [data, total] = await Promise.all([ServiceService.getAll({ limit, offset }), ServiceService.countAll()]);
@@ -26,12 +28,13 @@ router.get('/', async (c) => {
 });
 
 router.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
   const service = await ServiceService.getById(id);
   if (!service) return c.json(Errors.NOT_FOUND, 404);
 
-  if (payload.type === 'company' && service.companyPhone !== payload.phone) return c.json(Errors.UNAUTHORIZED, 403);
+  if (payload.type === 'company' && service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.UNAUTHORIZED, 403);
   if (payload.type === 'technician' && service.companyPhone !== payload.companyPhone) return c.json(Errors.UNAUTHORIZED, 403);
 
   return c.json(service);
@@ -55,7 +58,8 @@ router.post('/', async (c) => {
 });
 
 router.put('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
@@ -70,20 +74,21 @@ router.put('/:id', async (c) => {
 
   if (payload.type === 'company') {
     const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== payload.phone) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
+    if (!service || service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
   }
 
   return c.json(await ServiceService.update(id, result.data));
 });
 
 router.delete('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
   if (payload.type === 'company') {
     const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== payload.phone) return c.json(Errors.SERVICE_DELETE_OWN, 403);
+    if (!service || service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.SERVICE_DELETE_OWN, 403);
   }
 
   await ServiceService.delete(id);

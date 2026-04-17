@@ -5,7 +5,7 @@ export interface AppContext {
       id: number;
       type: 'technician' | 'company' | 'super_admin';
       phone: string;
-      companyPhone?: string; // only present for technician role
+      companyPhone?: string; // present for technician and company roles
       jti: string;           // unique token ID — used for revocation
       iat: number;
       exp: number;

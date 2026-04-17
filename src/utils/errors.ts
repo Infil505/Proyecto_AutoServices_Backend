@@ -26,6 +26,7 @@ export const Errors = {
   // ── Rate limiting ─────────────────────────────────────────────────────────────
   TOO_MANY_REQUESTS:          { status: 429, error: 'Too many requests' },
   TOO_MANY_ATTEMPTS:          { status: 429, error: 'Too many attempts' },
+  LOGIN_TOO_MANY_ATTEMPTS:    { status: 429, error: 'Too many failed login attempts. Try again in 15 minutes.' },
 
   // ── Database (PostgreSQL error codes) ─────────────────────────────────────────
   DB_UNIQUE_VIOLATION:        { status: 409, error: 'Resource already exists' },

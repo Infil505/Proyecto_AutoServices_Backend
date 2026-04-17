@@ -59,7 +59,7 @@ function jwtMiddleware(secret: string) {
     if (!payload || payload.tokenType === 'refresh') {
       return c.json(Errors.INVALID_TOKEN, 401);
     }
-    if (payload.jti && isBlacklisted(payload.jti as string)) {
+    if (payload.jti && await isBlacklisted(payload.jti as string)) {
       return c.json(Errors.TOKEN_REVOKED, 401);
     }
     c.set("user", payload as AppContext["Variables"]["user"]);
@@ -72,7 +72,8 @@ app.use("*", async (c, next) => {
   const start = Date.now();
   await next();
   const ms = Date.now() - start;
-  logger.http(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+  const safePath = c.req.path.replace(/[\r\n\t]/g, '');
+  logger.http(`${c.req.method} ${safePath} ${c.res.status} ${ms}ms`);
 });
 app.use("*", metricsMiddleware());
 

@@ -5,6 +5,7 @@ import { TechnicianService } from '../services/technicianService.js';
 import type { AppContext } from '../types.js';
 import { technicianCoverageZoneSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
+import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
 const router = new Hono<AppContext>();
@@ -22,9 +23,10 @@ router.get('/', async (c) => {
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
   if (payload.type === 'company') {
+    const cp = payload.companyPhone ?? payload.phone;
     const [data, total] = await Promise.all([
-      TechnicianCoverageZoneService.getByCompany(payload.phone, { limit, offset }),
-      TechnicianCoverageZoneService.countByCompany(payload.phone),
+      TechnicianCoverageZoneService.getByCompany(cp, { limit, offset }),
+      TechnicianCoverageZoneService.countByCompany(cp),
     ]);
     return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
   }
@@ -46,7 +48,7 @@ router.get('/technician/:phone', async (c) => {
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.UNAUTHORIZED, 403);
     }
   }
@@ -60,7 +62,8 @@ router.get('/technician/:phone', async (c) => {
 
 // GET /zone/:id — technicians assigned to a zone (full technician data)
 router.get('/zone/:id', async (c) => {
-  const id = parseInt(c.req.param('id'));
+  const id = parseIntParam(c.req.param('id'));
+  if (!id) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
   const { page, limit, offset } = parsePagination(c);
 
@@ -69,7 +72,7 @@ router.get('/zone/:id', async (c) => {
   }
   if (payload.type === 'company') {
     const zone = await CoverageZoneService.getById(id);
-    if (!zone || zone.companyPhone !== payload.phone) {
+    if (!zone || zone.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.UNAUTHORIZED, 403);
     }
   }
@@ -100,12 +103,13 @@ router.post('/', async (c) => {
   const { technicianPhone, coverageZoneId } = result.data;
 
   if (payload.type === 'company') {
+    const cp = payload.companyPhone ?? payload.phone;
     const technician = await TechnicianService.getById(technicianPhone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== cp) {
       return c.json(Errors.ZONE_TECHNICIAN_NOT_OWN, 403);
     }
     const zone = await CoverageZoneService.getById(coverageZoneId);
-    if (!zone || zone.companyPhone !== payload.phone) {
+    if (!zone || zone.companyPhone !== cp) {
       return c.json(Errors.ZONE_NOT_OWN_COMPANY, 403);
     }
   }
@@ -120,7 +124,8 @@ router.post('/', async (c) => {
 // DELETE /:technicianPhone/:zoneId — remove assignment (company or super_admin)
 router.delete('/:technicianPhone/:zoneId', async (c) => {
   const technicianPhone = c.req.param('technicianPhone');
-  const zoneId = parseInt(c.req.param('zoneId'));
+  const zoneId = parseIntParam(c.req.param('zoneId'));
+  if (!zoneId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type === 'technician') {
@@ -128,7 +133,7 @@ router.delete('/:technicianPhone/:zoneId', async (c) => {
   }
   if (payload.type === 'company') {
     const technician = await TechnicianService.getById(technicianPhone);
-    if (!technician || technician.companyPhone !== payload.phone) {
+    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
       return c.json(Errors.ZONE_TECHNICIAN_NOT_OWN, 403);
     }
   }

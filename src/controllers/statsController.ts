@@ -32,14 +32,15 @@ router.get('/', async (c) => {
   }
 
   if (payload.type === 'company') {
+    const cp = payload.companyPhone ?? payload.phone;
     const [appointments, completedAppointments, technicians, activeTechnicians, services, activeServices, zones] = await Promise.all([
-      AppointmentService.countByCompany(payload.phone),
-      AppointmentService.countCompletedByCompany(payload.phone),
-      TechnicianService.countByCompany(payload.phone),
-      TechnicianService.countAvailableByCompany(payload.phone),
-      ServiceService.countByCompany(payload.phone),
-      ServiceService.countActiveByCompany(payload.phone),
-      CoverageZoneService.countByCompany(payload.phone),
+      AppointmentService.countByCompany(cp),
+      AppointmentService.countCompletedByCompany(cp),
+      TechnicianService.countByCompany(cp),
+      TechnicianService.countAvailableByCompany(cp),
+      ServiceService.countByCompany(cp),
+      ServiceService.countActiveByCompany(cp),
+      CoverageZoneService.countByCompany(cp),
     ]);
     return c.json({ appointments, completedAppointments, technicians, activeTechnicians, services, activeServices, zones });
   }
