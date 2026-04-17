@@ -31,6 +31,7 @@ const r401 = { 401: { description: 'Unauthorized', content: { 'application/json'
 const r403 = { 403: { description: 'Forbidden', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } } };
 const r404 = { 404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } } };
 const r409 = { 409: { description: 'Conflict (already registered)', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } } };
+const r429 = { 429: { description: 'Too many requests / account locked', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } } };
 
 const protectedResponses = { ...r401, ...r403 };
 
@@ -38,11 +39,17 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'AutoServices API',
-    version: '1.0.0',
+    version: '1.3.0',
     description:
-      'REST API for the AutoServices appointment management system.\n\n' +
-      '**Authentication:** All endpoints except `/auth/register/company`, `/auth/login` and `/health` require a Bearer JWT.\n\n' +
-      '**Roles:** `super_admin` · `company` · `technician`',
+      'REST API for the AutoServices appointment and service management system.\n\n' +
+      '**Authentication:** All endpoints except `/auth/register/company`, `/auth/login`, `/auth/refresh`, `/public/*` and `/health` require a `Bearer <access_token>` JWT.\n\n' +
+      '**Token lifecycle:**\n' +
+      '- `POST /auth/login` → returns `token` (access) + `refreshToken`\n' +
+      '- `POST /auth/refresh` → exchange a refresh token for a new access token\n' +
+      '- `POST /auth/logout` → revokes both tokens (persisted in DB — survives restarts)\n\n' +
+      '**Login lockout:** 5 consecutive failed attempts for the same phone number → 15-minute lockout.\n\n' +
+      '**Roles:** `super_admin` · `company` · `technician`\n\n' +
+      '**IDOR protection:** Company users can only modify resources that belong to their company.',
   },
   servers: [
     { url: 'http://localhost:3000', description: 'Local development' },
@@ -84,6 +91,7 @@ export const openApiSpec = {
           phone: { type: 'string' },
           name: { type: 'string' },
           email: { type: 'string', format: 'email', nullable: true },
+          companyPhone: { type: 'string', nullable: true, description: 'For company/technician users: the company they belong to' },
           createdAt: { type: 'string', format: 'date-time' },
         },
       },
@@ -339,7 +347,7 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Login',
-        description: 'Authenticates with phone + password. Returns a JWT valid for the configured duration. **Public.**',
+        description: 'Authenticates with phone + password. Returns a JWT valid for the configured duration. **Public.**\n\n**Rate limit:** After 5 consecutive failed attempts for the same phone number, the account is locked for 15 minutes.',
         requestBody: {
           required: true,
           content: {
@@ -366,6 +374,7 @@ export const openApiSpec = {
           }),
           ...r400,
           401: { description: 'Invalid credentials', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          429: { description: 'Too many failed attempts — account locked for 15 minutes', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -594,6 +603,40 @@ export const openApiSpec = {
           },
         },
         responses: { ...r201({ $ref: '#/components/schemas/Company' }), ...r400, ...protectedResponses },
+      },
+    },
+    '/api/v1/companies/{phone}/admin': {
+      post: {
+        tags: ['Companies'],
+        summary: 'Create company admin',
+        description: 'Creates an additional admin user for an existing company. The new user has `type: company` and is linked to the company via `companyPhone`. **Only `super_admin`.**',
+        security: bearerAuth,
+        parameters: [phoneParam('phone')],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['phone', 'name', 'password'],
+                properties: {
+                  phone: { type: 'string', example: '+1555111222', description: "Admin's personal phone (used for login)" },
+                  name: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
+                  password: { type: 'string', minLength: 8 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          ...r201({ type: 'object', properties: { user: { $ref: '#/components/schemas/User' } } }),
+          ...r400,
+          ...r401,
+          ...r403,
+          ...r404,
+          ...r409,
+        },
       },
     },
     '/api/v1/companies/{phone}': {
