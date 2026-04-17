@@ -25,6 +25,7 @@
     "@types/ioredis": "^5.0.0",
     "@types/node": "^20.19.37",
     "@types/pdfkit": "^0.17.5",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.57.1",
@@ -48,6 +49,7 @@
     "postgres": "^3.4.8",
     "resend": "^6.10.0",
     "swagger-ui": "^5.32.1",
+    "web-push": "^3.6.7",
     "winston": "^3.19.0",
     "ws": "^8.13.0",
     "zod": "^3.25.76"

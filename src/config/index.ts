@@ -19,6 +19,9 @@ interface Config {
   redisUrl: string;
   metricsApiKey: string;
   trustProxy: boolean;
+  vapidPublicKey: string;
+  vapidPrivateKey: string;
+  vapidEmail: string;
 }
 
 const getConfig = (): Config => {
@@ -41,6 +44,9 @@ const getConfig = (): Config => {
   const redisUrl = process.env.REDIS_URL || '';
   const metricsApiKey = process.env.METRICS_API_KEY || '';
   const trustProxy = process.env.TRUST_PROXY !== 'false';
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+  const vapidEmail = process.env.VAPID_EMAIL || 'mailto:noreply@autoservices.com';
 
   // Validate required environment variables (only in production)
   if (nodeEnv === 'production') {
@@ -77,6 +83,9 @@ const getConfig = (): Config => {
     redisUrl,
     metricsApiKey,
     trustProxy,
+    vapidPublicKey,
+    vapidPrivateKey,
+    vapidEmail,
   };
 };
 

@@ -27,6 +27,9 @@ import { Errors } from "./src/utils/errors.js";
 import { isBlacklisted } from "./src/utils/tokenBlacklist.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 import { EmailService } from "./src/services/emailService.js";
+import { PushService } from "./src/services/pushService.js";
+import { AppointmentService } from "./src/services/appointmentService.js";
+import pushRoutes from "./src/routes/pushRoutes.js";
 import { db } from "./src/db/index.js";
 import { sql } from "drizzle-orm";
 
@@ -46,6 +49,10 @@ const wss = startAppointmentWebsocket();
 
 // Start email listener — sends PDF to customer when both statuses are completed
 EmailService.startEmailListener();
+
+// Initialize Web Push notifications (requires VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY in .env)
+PushService.init();
+PushService.attachToEvents(AppointmentService.events);
 
 // JWT verification middleware
 function jwtMiddleware(secret: string) {
@@ -115,6 +122,7 @@ const protectedPrefixes = [
   "/api/v1/users",
   "/api/v1/stats",
   "/api/v1/admin",
+  "/api/v1/push-subscriptions",
 ] as const;
 
 for (const prefix of protectedPrefixes) {
@@ -136,6 +144,7 @@ app.route("/api/v1/technician-coverage-zones", technicianCoverageZoneRoutes);
 app.route("/api/v1/users", userRoutes);
 app.route("/api/v1/stats", statsRoutes);
 app.route("/api/v1/admin", adminRoutes);
+app.route("/api/v1/push-subscriptions", pushRoutes);
 
 // Health check
 app.get("/health", (c) =>
