@@ -334,7 +334,8 @@ export const openApiSpec = {
           ...r200({
             type: 'object',
             properties: {
-              token: { type: 'string', description: 'Bearer JWT' },
+              token: { type: 'string', description: 'Short-lived access JWT' },
+              refreshToken: { type: 'string', description: 'Long-lived refresh JWT' },
               user: { $ref: '#/components/schemas/User' },
             },
           }),
@@ -1373,6 +1374,153 @@ export const openApiSpec = {
         security: bearerAuth,
         parameters: [phoneParam('technicianPhone'), idParam('zoneId')],
         responses: { ...r204, ...protectedResponses, ...r404 },
+      },
+    },
+
+    // ─── STATS ─────────────────────────────────────────────────────────────────
+    '/api/v1/stats': {
+      get: {
+        tags: ['Stats'],
+        summary: 'Get dashboard stats',
+        description:
+          'Returns lightweight COUNT(*) data — no row payload.\n\n' +
+          '- `super_admin` → `{ companies, appointments, technicians, customers, services }`\n' +
+          '- `company` → `{ appointments, completedAppointments, technicians, activeTechnicians, services, activeServices, zones }`\n' +
+          '- `technician` → `{ appointments }`',
+        security: bearerAuth,
+        responses: {
+          ...r200({
+            type: 'object',
+            description: 'Shape depends on caller role (see description above)',
+            properties: {
+              companies:            { type: 'integer', description: 'super_admin only' },
+              appointments:         { type: 'integer' },
+              completedAppointments:{ type: 'integer', description: 'company only' },
+              technicians:          { type: 'integer' },
+              activeTechnicians:    { type: 'integer', description: 'company only' },
+              customers:            { type: 'integer', description: 'super_admin only' },
+              services:             { type: 'integer' },
+              activeServices:       { type: 'integer', description: 'company only' },
+              zones:                { type: 'integer', description: 'company only' },
+            },
+          }),
+          ...protectedResponses,
+        },
+      },
+    },
+
+    // ─── PUBLIC ────────────────────────────────────────────────────────────────
+    '/api/v1/public/stats': {
+      get: {
+        tags: ['Public'],
+        summary: 'Platform-wide aggregate counts',
+        description: 'No authentication required. Used by the landing page to show real platform growth numbers.',
+        responses: {
+          ...r200({
+            type: 'object',
+            properties: {
+              companies:    { type: 'integer' },
+              appointments: { type: 'integer' },
+              technicians:  { type: 'integer' },
+              services:     { type: 'integer' },
+            },
+          }),
+        },
+      },
+    },
+
+    // ─── ADMIN ─────────────────────────────────────────────────────────────────
+    '/api/v1/admin/metrics': {
+      get: {
+        tags: ['Admin'],
+        summary: 'System health metrics',
+        description: 'Returns uptime, memory usage, response-time stats, and DB latency. **Only `super_admin`.**',
+        security: bearerAuth,
+        responses: {
+          ...r200({
+            type: 'object',
+            properties: {
+              uptime: { type: 'integer', description: 'Milliseconds since server start' },
+              memory: {
+                type: 'object',
+                properties: {
+                  used:    { type: 'integer', description: 'Heap used (bytes)' },
+                  total:   { type: 'integer', description: 'Heap total (bytes)' },
+                  percent: { type: 'integer', description: 'Used %' },
+                },
+              },
+              responseTime: {
+                type: 'object',
+                properties: {
+                  avg: { type: 'integer', description: 'Average response time (ms)' },
+                  min: { type: 'integer', description: 'Minimum response time (ms)' },
+                  max: { type: 'integer', description: 'Maximum response time (ms)' },
+                },
+              },
+              requests: {
+                type: 'object',
+                properties: {
+                  total:  { type: 'integer' },
+                  errors: { type: 'integer' },
+                },
+              },
+              database: {
+                type: 'object',
+                properties: {
+                  status:    { type: 'string', example: 'online' },
+                  latencyMs: { type: 'integer' },
+                },
+              },
+            },
+          }),
+          503: { description: 'Database unreachable', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          ...protectedResponses,
+        },
+      },
+    },
+    '/api/v1/admin/growth': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Monthly growth data',
+        description: 'Returns company + appointment counts per month for the past 6 months. **Only `super_admin`.**',
+        security: bearerAuth,
+        responses: {
+          ...r200({
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                month:        { type: 'string', example: '2026-04', description: 'YYYY-MM' },
+                companies:    { type: 'integer' },
+                appointments: { type: 'integer' },
+              },
+            },
+          }),
+          ...protectedResponses,
+        },
+      },
+    },
+    '/api/v1/admin/activity': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Latest platform activity',
+        description: 'Returns the 10 most recent platform events (company registrations + appointments). **Only `super_admin`.**',
+        security: bearerAuth,
+        responses: {
+          ...r200({
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                type:      { type: 'string', enum: ['company_joined', 'appointment_created'] },
+                message:   { type: 'string', example: 'AutoServices Pro' },
+                phone:     { type: 'string', example: '+1234567890' },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          }),
+          ...protectedResponses,
+        },
       },
     },
 
