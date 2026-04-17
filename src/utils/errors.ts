@@ -17,6 +17,7 @@ export const Errors = {
   // ── Auth ─────────────────────────────────────────────────────────────────────
   MISSING_AUTH_HEADER:        { status: 401, error: 'Missing authorization header' },
   INVALID_TOKEN:              { status: 401, error: 'Invalid token' },
+  TOKEN_REVOKED:              { status: 401, error: 'Token has been revoked' },
   INVALID_CREDENTIALS:        { status: 401, error: 'Invalid credentials' },
   INVALID_REFRESH_TOKEN:      { status: 401, error: 'Invalid or expired refresh token' },
   REFRESH_TOKEN_REQUIRED:     { status: 400, error: 'refreshToken is required' },

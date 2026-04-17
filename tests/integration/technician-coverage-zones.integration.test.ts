@@ -26,13 +26,13 @@ const setup = DB_AVAILABLE
     })()
   : null;
 
-type AppContext = { Variables: { user: { id: number; type: string; phone: string; companyPhone?: string; iat: number; exp: number } } };
+type AppContext = { Variables: { user: { id: number; type: string; phone: string; companyPhone?: string; jti: string; tokenType: string; iat: number; exp: number } } };
 
 function buildApp(type: 'company' | 'super_admin' | 'technician', phone: string, companyPhone?: string) {
   const { tcZoneRoutes, coverageZoneRoutes } = setup!;
   const app = new Hono<AppContext>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 1, type, phone, companyPhone, iat: 0, exp: 9_999_999_999 });
+    c.set('user', { id: 1, type, phone, companyPhone, jti: 'test-jti', tokenType: 'access' as const, iat: 0, exp: 9_999_999_999 });
     await next();
   });
   app.route('/api/v1/technician-coverage-zones', tcZoneRoutes);

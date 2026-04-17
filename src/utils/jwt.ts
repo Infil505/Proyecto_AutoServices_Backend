@@ -1,9 +1,12 @@
+import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 
 const encode = (secret: string) => new TextEncoder().encode(secret);
 
 export async function createJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
-  return new SignJWT(payload)
+  // Always inject a unique JTI so the token can be individually revoked.
+  const withJti = { jti: randomUUID(), ...payload };
+  return new SignJWT(withJti)
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .sign(encode(secret));
 }

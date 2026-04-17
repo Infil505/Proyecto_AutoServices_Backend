@@ -131,11 +131,11 @@ export class AppointmentService {
     const row = result[0];
     if (!row) return undefined;
     return {
-      ...row.appointment,
-      customer: row.customer ?? undefined,
-      technician: row.technician ?? undefined,
-      service: row.service ?? undefined,
-      company: row.company ?? undefined,
+      appointment: row.appointment,
+      customer: row.customer ?? null,
+      technician: row.technician ?? null,
+      service: row.service ?? null,
+      company: row.company ?? null,
     };
   }
 

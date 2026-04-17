@@ -15,8 +15,12 @@ const mockAppointments = [
 mock.module('../src/services/appointmentService', () => ({
   AppointmentService: {
     getAll: mock(() => Promise.resolve(mockAppointments)),
+    getAllWithDetails: mock(() => Promise.resolve(mockAppointments)),
     countAll: mock(() => Promise.resolve(mockAppointments.length)),
     getByTechnician: mock((phone: string) =>
+      Promise.resolve(mockAppointments.filter(a => a.technicianPhone === phone))
+    ),
+    getByTechnicianWithDetails: mock((phone: string) =>
       Promise.resolve(mockAppointments.filter(a => a.technicianPhone === phone))
     ),
     countByTechnician: mock((phone: string) =>
@@ -25,12 +29,20 @@ mock.module('../src/services/appointmentService', () => ({
     getByCompany: mock((phone: string) =>
       Promise.resolve(mockAppointments.filter(a => a.companyPhone === phone))
     ),
+    getByCompanyWithDetails: mock((phone: string) =>
+      Promise.resolve(mockAppointments.filter(a => a.companyPhone === phone))
+    ),
     countByCompany: mock((phone: string) =>
       Promise.resolve(mockAppointments.filter(a => a.companyPhone === phone).length)
     ),
     getById: mock((id: number) =>
       Promise.resolve(mockAppointments.find(a => a.id === id) ?? null)
     ),
+    getFullById: mock((id: number) => {
+      const appt = mockAppointments.find(a => a.id === id);
+      if (!appt) return Promise.resolve(undefined);
+      return Promise.resolve({ appointment: appt, customer: null, company: null, technician: null, service: null });
+    }),
     events: new EventEmitter(),
   },
 }));
@@ -81,7 +93,7 @@ const { default: technicianRoutes } = await import('../src/routes/technicianRout
 function createApp(type: 'technician' | 'company' | 'super_admin', phone: string) {
   const app = new Hono<AppContext>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 1, type, phone, iat: 0, exp: 9_999_999_999 });
+    c.set('user', { id: 1, type, phone, jti: 'test-jti', tokenType: 'access' as const, iat: 0, exp: 9_999_999_999 });
     await next();
   });
   app.route('/api/v1/appointments', appointmentRoutes);

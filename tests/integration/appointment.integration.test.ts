@@ -36,9 +36,9 @@ const setup = DB_AVAILABLE
 
 function buildApp(type: 'company' | 'technician' | 'super_admin', phone: string, companyPhone?: string) {
   const { appointmentRoutes, technicianRoutes } = setup!;
-  const app = new Hono<{ Variables: { user: { id: number; type: string; phone: string; companyPhone?: string; iat: number; exp: number } } }>();
+  const app = new Hono<{ Variables: { user: { id: number; type: string; phone: string; companyPhone?: string; jti: string; tokenType: string; iat: number; exp: number } } }>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 1, type, phone, companyPhone, iat: 0, exp: 9_999_999_999 });
+    c.set('user', { id: 1, type, phone, companyPhone, jti: 'test-jti', tokenType: 'access' as const, iat: 0, exp: 9_999_999_999 });
     await next();
   });
   app.route('/api/v1/appointments', appointmentRoutes);

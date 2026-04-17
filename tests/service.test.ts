@@ -11,7 +11,7 @@ function createTestApp(
 ) {
   const app = new Hono<AppContext>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 1, type: userType, phone, companyPhone, iat: 0, exp: 9_999_999_999 });
+    c.set('user', { id: 1, type: userType, phone, companyPhone, jti: 'test-jti', tokenType: 'access' as const, iat: 0, exp: 9_999_999_999 });
     await next();
   });
   app.route('/api/v1/services', serviceRoutes);

@@ -281,6 +281,31 @@ export const openApiSpec = {
         },
       },
     },
+    '/api/v1/auth/logout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Logout',
+        description: 'Revokes the caller\'s access token immediately. Optionally pass `refreshToken` in the body to revoke it too. **Requires Bearer JWT.**',
+        security: bearerAuth,
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  refreshToken: { type: 'string', description: 'If provided, the refresh token will also be revoked' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          ...r200({ $ref: '#/components/schemas/MessageResponse' }),
+          ...r401,
+        },
+      },
+    },
     '/api/v1/auth/refresh': {
       post: {
         tags: ['Auth'],

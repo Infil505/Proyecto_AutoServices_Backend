@@ -4,6 +4,7 @@ import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
 import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
 import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
+import { blacklistToken } from '../utils/tokenBlacklist.js';
 import { config } from '../config/index.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
@@ -111,6 +112,30 @@ router.post('/refresh', async (c) => {
   );
 
   return c.json({ token });
+});
+
+/**
+ * POST /api/auth/logout
+ * Protected. Revokes the caller's access token (and optionally a refresh token).
+ * The JWT middleware rejects revoked tokens even before they expire.
+ */
+router.post('/logout', async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json(Errors.MISSING_AUTH_HEADER, 401);
+
+  // Revoke the access token that was used to authenticate this request.
+  blacklistToken(user.jti, user.exp);
+
+  // Optionally revoke the refresh token if the client sends it.
+  const body = await c.req.json().catch(() => null);
+  if (body?.refreshToken && typeof body.refreshToken === 'string') {
+    const refreshPayload = await verifyJWT(body.refreshToken, config.jwtSecret);
+    if (refreshPayload?.jti && refreshPayload?.exp && refreshPayload.tokenType === 'refresh') {
+      blacklistToken(refreshPayload.jti as string, refreshPayload.exp as number);
+    }
+  }
+
+  return c.json({ message: 'Logged out successfully' });
 });
 
 export default router;

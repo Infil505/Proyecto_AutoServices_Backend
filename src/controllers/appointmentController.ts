@@ -36,17 +36,17 @@ router.get('/', async (c) => {
 router.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const payload = c.var.user!;
-  const appointment = await AppointmentService.getFullById(id);
-  if (!appointment) return c.json(Errors.NOT_FOUND, 404);
+  const fullData = await AppointmentService.getFullById(id);
+  if (!fullData) return c.json(Errors.NOT_FOUND, 404);
 
-  if (payload.type === 'technician' && appointment.technicianPhone !== payload.phone) {
+  if (payload.type === 'technician' && fullData.appointment.technicianPhone !== payload.phone) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
-  if (payload.type === 'company' && appointment.companyPhone !== payload.phone) {
+  if (payload.type === 'company' && fullData.appointment.companyPhone !== payload.phone) {
     return c.json(Errors.UNAUTHORIZED, 403);
   }
 
-  return c.json(appointment);
+  return c.json(fullData.appointment);
 });
 
 router.post('/', async (c) => {

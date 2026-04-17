@@ -8,7 +8,7 @@ import type { AppContext } from '../src/types';
 function createTestApp(userType: 'technician' | 'company' | 'super_admin', phone = '+1234567890') {
   const app = new Hono<AppContext>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 1, type: userType, phone, iat: 0, exp: 9_999_999_999 });
+    c.set('user', { id: 1, type: userType, phone, jti: 'test-jti', tokenType: 'access' as const, iat: 0, exp: 9_999_999_999 });
     await next();
   });
   app.route('/api/v1/coverage-zones', coverageZoneRoutes);

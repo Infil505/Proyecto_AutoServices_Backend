@@ -24,6 +24,7 @@ import publicRoutes from "./src/routes/publicRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
 import { Errors } from "./src/utils/errors.js";
+import { isBlacklisted } from "./src/utils/tokenBlacklist.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 import { EmailService } from "./src/services/emailService.js";
 import { db } from "./src/db/index.js";
@@ -58,6 +59,9 @@ function jwtMiddleware(secret: string) {
     if (!payload || payload.tokenType === 'refresh') {
       return c.json(Errors.INVALID_TOKEN, 401);
     }
+    if (payload.jti && isBlacklisted(payload.jti as string)) {
+      return c.json(Errors.TOKEN_REVOKED, 401);
+    }
     c.set("user", payload as AppContext["Variables"]["user"]);
     await next();
   };
@@ -86,7 +90,7 @@ app.use("/api/v1/auth/*", authRateLimit);
 // Public routes — no JWT required
 app.route("/api/v1/public", publicRoutes);
 
-// Public auth routes
+// Public auth routes (register, login, refresh) — no JWT
 app.route("/api/v1/auth", authRoutes);
 
 // JWT middleware for protected routes.
@@ -95,6 +99,8 @@ app.route("/api/v1/auth", authRoutes);
 // not match the base path without a trailing slash.
 const jwtProtect = jwtMiddleware(config.jwtSecret);
 const protectedPrefixes = [
+  "/api/v1/auth/logout",
+  "/api/v1/auth/register/admin",
   "/api/v1/appointments",
   "/api/v1/companies",
   "/api/v1/customers",
