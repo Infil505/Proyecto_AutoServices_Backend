@@ -20,8 +20,8 @@ if (databaseUrl.includes('[YOUR_') || databaseUrl.includes('[TU-CONTRASE')) {
 }
 
 const client = postgres(databaseUrl, {
-  max: 10,           // max pool connections (Supabase default limit)
-  idle_timeout: 30,  // close idle connections after 30s
+  max: 20,           // Supabase free tier allows ~60 direct connections; 20 per process is safe
+  idle_timeout: 20,  // close idle connections after 20s to free up Supabase slots
   connect_timeout: 10,
   // If using Supabase transaction pooler (port 6543), add: prepare: false
 });

@@ -1,4 +1,7 @@
+import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { db } from '../db/index.js';
+import { companies } from '../db/schema.js';
 import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
@@ -6,6 +9,13 @@ import { companySchema, companyAdminSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const COMPANIES_LIST_TTL_MS = 30_000;
+
+function invalidateCompaniesCache() {
+  cacheDeletePrefix('companies:list:');
+}
 
 const router = new Hono<AppContext>();
 
@@ -21,11 +31,23 @@ router.get('/', async (c) => {
   }
 
   const { page, limit, offset } = parsePagination(c);
-  const [data, total] = await Promise.all([
-    CompanyService.getAll({ limit, offset }),
-    CompanyService.countAll(),
-  ]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const cacheKey = `companies:list:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
+
+  type Row = typeof companies.$inferSelect & { total_count: string };
+  const rows = await db.execute<Row>(sql`
+    SELECT *, COUNT(*) OVER()::int AS total_count
+    FROM companies
+    ORDER BY created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const data = rows.map(({ total_count: _, ...rest }) => rest);
+  const response = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, response, COMPANIES_LIST_TTL_MS);
+  return c.json(response);
 });
 
 router.get('/:phone', async (c) => {
@@ -59,7 +81,9 @@ router.post('/', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  return c.json(await CompanyService.create(result.data), 201);
+  const company = await CompanyService.create(result.data);
+  invalidateCompaniesCache();
+  return c.json(company, 201);
 });
 
 router.put('/:phone', async (c) => {
@@ -79,7 +103,9 @@ router.put('/:phone', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  return c.json(await CompanyService.update(phone, result.data));
+  const updated = await CompanyService.update(phone, result.data);
+  invalidateCompaniesCache();
+  return c.json(updated);
 });
 
 router.delete('/:phone', async (c) => {
@@ -92,6 +118,7 @@ router.delete('/:phone', async (c) => {
   }
 
   await CompanyService.delete(phone);
+  invalidateCompaniesCache();
   return c.json({ message: 'Deleted' });
 });
 

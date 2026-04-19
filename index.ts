@@ -33,9 +33,11 @@ import pushRoutes from "./src/routes/pushRoutes.js";
 import { db } from "./src/db/index.js";
 import { sql } from "drizzle-orm";
 
-// ── DB health check ──────────────────────────────────────────────────────────
+// ── DB health check + connection pool warm-up ────────────────────────────────
+// Pre-establish 5 connections so the first real requests don't pay the TCP
+// handshake cost (~500ms each on Supabase cloud).
 try {
-  await db.execute(sql`SELECT 1`);
+  await Promise.all(Array.from({ length: 5 }, () => db.execute(sql`SELECT 1`)));
   logger.info("Database connection established");
 } catch (err) {
   logger.error(`Failed to connect to database: ${(err as Error).message}`);
