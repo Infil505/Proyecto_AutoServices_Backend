@@ -19,5 +19,10 @@ if (databaseUrl.includes('[YOUR_') || databaseUrl.includes('[TU-CONTRASE')) {
   );
 }
 
-const client = postgres(databaseUrl);
+const client = postgres(databaseUrl, {
+  max: 10,           // max pool connections (Supabase default limit)
+  idle_timeout: 30,  // close idle connections after 30s
+  connect_timeout: 10,
+  // If using Supabase transaction pooler (port 6543), add: prepare: false
+});
 export const db = drizzle(client, { schema });

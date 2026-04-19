@@ -1,4 +1,4 @@
-import { and, count, eq, ne } from 'drizzle-orm';
+import { and, count, eq, inArray, ne, sql } from 'drizzle-orm';
 import { EventEmitter } from 'events';
 import { db } from '../db/index.js';
 import { appointments, customers, companies, technicians, services } from '../db/schema.js';
@@ -104,6 +104,17 @@ export class AppointmentService {
 
   // ── Single record ────────────────────────────────────────────────────────────
 
+  static async countActiveByTechnician(technicianPhone: string): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(appointments)
+      .where(and(
+        eq(appointments.technicianPhone, technicianPhone),
+        inArray(appointments.status, ['pending', 'confirmed', 'in_progress']),
+      ));
+    return Number(row?.value ?? 0);
+  }
+
   static async getByTechnicianAndDate(technicianPhone: string, date: string) {
     return await db.select().from(appointments).where(
       and(
@@ -153,10 +164,16 @@ export class AppointmentService {
     return appointment;
   }
 
-  static async update(id: number, data: Partial<typeof appointments.$inferInsert>) {
-    const current = await AppointmentService.getById(id);
-    const result = await db.update(appointments).set(data).where(eq(appointments.id, id)).returning();
-    const appointment = result[0];
+  /**
+   * @param existing - pass the record if already fetched by the caller (avoids a duplicate SELECT)
+   */
+  static async update(
+    id: number,
+    data: Partial<typeof appointments.$inferInsert>,
+    existing?: typeof appointments.$inferSelect,
+  ) {
+    const current = existing ?? await AppointmentService.getById(id);
+    const [appointment] = await db.update(appointments).set(data).where(eq(appointments.id, id)).returning();
     if (appointment) {
       AppointmentService.events.emit('appointment:updated', appointment);
       const wasUnassigned = !current?.technicianPhone;
@@ -169,36 +186,48 @@ export class AppointmentService {
     return appointment;
   }
 
-  static async delete(id: number) {
-    const existing = await AppointmentService.getById(id);
+  /**
+   * @param existing - pass the record if already fetched by the caller (avoids a duplicate SELECT)
+   */
+  static async delete(id: number, existing?: typeof appointments.$inferSelect) {
     await db.delete(appointments).where(eq(appointments.id, id));
     AppointmentService.events.emit('appointment:deleted', existing ?? { id });
   }
 
   static async updateTechnicianStatus(id: number, estatusTecnico: boolean) {
-    const current = await AppointmentService.getById(id);
-    const willComplete = estatusTecnico && !!current?.estatusAdministrador;
-    const updateData: Partial<typeof appointments.$inferInsert> = { estatusTecnico };
-    if (willComplete) updateData.status = 'completed';
-    const result = await db.update(appointments).set(updateData).where(eq(appointments.id, id)).returning();
-    const appointment = result[0];
+    // Single round-trip: CASE reads estatus_administrador from the current row in the same UPDATE
+    const [appointment] = await db
+      .update(appointments)
+      .set({
+        estatusTecnico,
+        status: sql<string>`CASE WHEN ${estatusTecnico}::boolean AND estatus_administrador IS TRUE THEN 'completed' ELSE status END`,
+      })
+      .where(eq(appointments.id, id))
+      .returning();
     if (appointment) {
       AppointmentService.events.emit('appointment:updated', appointment);
-      if (willComplete) AppointmentService.events.emit('appointment:both_completed', appointment);
+      if (appointment.status === 'completed') {
+        AppointmentService.events.emit('appointment:both_completed', appointment);
+      }
     }
     return appointment;
   }
 
   static async updateAdminStatus(id: number, estatusAdministrador: boolean) {
-    const current = await AppointmentService.getById(id);
-    const willComplete = estatusAdministrador && !!current?.estatusTecnico;
-    const updateData: Partial<typeof appointments.$inferInsert> = { estatusAdministrador };
-    if (willComplete) updateData.status = 'completed';
-    const result = await db.update(appointments).set(updateData).where(eq(appointments.id, id)).returning();
-    const appointment = result[0];
+    // Single round-trip: CASE reads estatus_tecnico from the current row in the same UPDATE
+    const [appointment] = await db
+      .update(appointments)
+      .set({
+        estatusAdministrador,
+        status: sql<string>`CASE WHEN ${estatusAdministrador}::boolean AND estatus_tecnico IS TRUE THEN 'completed' ELSE status END`,
+      })
+      .where(eq(appointments.id, id))
+      .returning();
     if (appointment) {
       AppointmentService.events.emit('appointment:updated', appointment);
-      if (willComplete) AppointmentService.events.emit('appointment:both_completed', appointment);
+      if (appointment.status === 'completed') {
+        AppointmentService.events.emit('appointment:both_completed', appointment);
+      }
     }
     return appointment;
   }

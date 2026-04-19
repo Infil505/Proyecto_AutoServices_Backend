@@ -48,7 +48,8 @@ export const Errors = {
   TECHNICIAN_OWN_AVAILABILITY:      { status: 403, error: 'Can only access own availability' },
   TECHNICIAN_OWN_COMPANY_ACCESS:    { status: 403, error: 'Can only access own technicians' },
   TECHNICIAN_OWN_COMPANY_UPDATE:    { status: 403, error: 'Can only update own technicians' },
-  TECHNICIAN_OWN_COMPANY_DELETE:    { status: 403, error: 'Can only delete own technicians' },
+  TECHNICIAN_OWN_COMPANY_DELETE:            { status: 403, error: 'Can only delete own technicians' },
+  TECHNICIAN_HAS_ACTIVE_APPOINTMENTS:       { status: 409, error: 'Cannot mark as unavailable while having active appointments' },
 
   // ── Customers ─────────────────────────────────────────────────────────────────
   CUSTOMER_CREATE_ONLY:   { status: 403, error: 'Only companies and super_admins can create customers' },

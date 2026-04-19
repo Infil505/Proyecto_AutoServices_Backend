@@ -5,6 +5,10 @@ import { appointments, companies } from '../db/schema.js';
 import { getMetrics } from '../middleware/metrics.js';
 import { Errors } from '../utils/errors.js';
 import type { AppContext } from '../types.js';
+import { cacheGet, cacheSet } from '../utils/cache.js';
+
+const GROWTH_TTL_MS   = 60_000; // 1 minute — monthly chart data changes slowly
+const ACTIVITY_TTL_MS = 30_000; // 30 seconds
 
 const router = new Hono<AppContext>();
 
@@ -59,6 +63,9 @@ router.get('/metrics', async (c) => {
  * Uses Drizzle query builder (not db.execute) for compatibility with Supabase pooler.
  */
 router.get('/growth', async (c) => {
+  const cached = cacheGet<object[]>('admin:growth');
+  if (cached) return c.json(cached);
+
   // Build last 6 month labels (YYYY-MM strings)
   const monthLabels: string[] = [];
   for (let i = 5; i >= 0; i--) {
@@ -100,6 +107,7 @@ router.get('/growth', async (c) => {
     appointments: apptMap.get(month) ?? 0,
   }));
 
+  cacheSet('admin:growth', data, GROWTH_TTL_MS);
   return c.json(data);
 });
 
@@ -108,6 +116,9 @@ router.get('/growth', async (c) => {
  * Latest 10 platform events (recent companies + recent appointments), sorted by date.
  */
 router.get('/activity', async (c) => {
+  const cached = cacheGet<object[]>('admin:activity');
+  if (cached) return c.json(cached);
+
   const [recentCompanies, recentAppointments] = await Promise.all([
     db.select().from(companies).orderBy(desc(companies.createdAt)).limit(5),
     db.select().from(appointments).orderBy(desc(appointments.createdAt)).limit(5),
@@ -130,6 +141,7 @@ router.get('/activity', async (c) => {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
+  cacheSet('admin:activity', events, ACTIVITY_TTL_MS);
   return c.json(events);
 });
 

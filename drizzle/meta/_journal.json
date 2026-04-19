@@ -29,6 +29,13 @@
       "when": 1776429371326,
       "tag": "0003_little_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776464101022,
+      "tag": "0004_old_prodigy",
+      "breakpoints": true
     }
   ]
 }

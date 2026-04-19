@@ -113,6 +113,12 @@ router.put('/:phone', async (c) => {
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
   }
+
+  if (result.data.available === false) {
+    const activeCount = await AppointmentService.countActiveByTechnician(phone);
+    if (activeCount > 0) return c.json(Errors.TECHNICIAN_HAS_ACTIVE_APPOINTMENTS, 409);
+  }
+
   return c.json(await TechnicianService.update(phone, result.data));
 });
 

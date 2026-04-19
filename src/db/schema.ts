@@ -1,4 +1,4 @@
-import { bigint, bigserial, boolean, date, integer, jsonb, pgTable, primaryKey, serial, text, time, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, date, index, integer, jsonb, pgTable, primaryKey, serial, text, time, timestamp } from 'drizzle-orm/pg-core';
 
 export const companies = pgTable('companies', {
   phone: text('phone').primaryKey(),
@@ -8,7 +8,9 @@ export const companies = pgTable('companies', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   startHour: time('startHour', { withTimezone: true }),
   endHour: time('endHours', { withTimezone: true }), // DB column name is 'endHours'
-});
+}, (t) => ({
+  createdAtIdx: index('idx_companies_created_at').on(t.createdAt),
+}));
 
 export const customers = pgTable('customers', {
   phone: text('phone').primaryKey(),
@@ -30,7 +32,10 @@ export const technicians = pgTable('technicians', {
   email: text('email'),
   available: boolean('available').default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (t) => ({
+  companyPhoneIdx: index('idx_technicians_company_phone').on(t.companyPhone),
+  availableIdx:    index('idx_technicians_available').on(t.available),
+}));
 
 export const specialties = pgTable('specialties', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -49,7 +54,10 @@ export const services = pgTable('services', {
   estimatedDurationMinutes: integer('estimated_duration_minutes').notNull(),
   active: boolean('active').default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (t) => ({
+  companyPhoneIdx: index('idx_services_company_phone').on(t.companyPhone),
+  activeIdx:       index('idx_services_active').on(t.active),
+}));
 
 export const serviceSpecialties = pgTable('service_specialties', {
   serviceId: bigint('service_id', { mode: 'number' }).notNull().references(() => services.id),
@@ -81,7 +89,12 @@ export const appointments = pgTable('appointments', {
   serviceId: bigint('service_id', { mode: 'number' }).references(() => services.id),
   estatusTecnico: boolean('estatus_tecnico'),
   estatusAdministrador: boolean('estatus_administrador'),
-});
+}, (t) => ({
+  companyPhoneIdx:    index('idx_appointments_company_phone').on(t.companyPhone),
+  technicianPhoneIdx: index('idx_appointments_technician_phone').on(t.technicianPhone),
+  statusIdx:          index('idx_appointments_status').on(t.status),
+  createdAtIdx:       index('idx_appointments_created_at').on(t.createdAt),
+}));
 
 export const coverageZones = pgTable('coverage_zones', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -93,7 +106,9 @@ export const coverageZones = pgTable('coverage_zones', {
   coordinates: jsonb('coordinates'),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (t) => ({
+  companyPhoneIdx: index('idx_coverage_zones_company_phone').on(t.companyPhone),
+}));
 
 export const technicianCoverageZones = pgTable('technician_coverage_zones', {
   technicianPhone: text('technician_phone').notNull().references(() => technicians.phone, { onDelete: 'cascade' }),

@@ -80,8 +80,9 @@ router.put('/:id', async (c) => {
     return c.json(Errors.APPOINTMENT_UPDATE_ONLY, 403);
   }
 
+  let existing: Awaited<ReturnType<typeof AppointmentService.getById>> | undefined;
   if (payload.type === 'company') {
-    const existing = await AppointmentService.getById(id);
+    existing = await AppointmentService.getById(id);
     if (!existing) return c.json(Errors.NOT_FOUND, 404);
     if (existing.companyPhone !== (payload.companyPhone ?? payload.phone))
       return c.json(Errors.UNAUTHORIZED, 403);
@@ -95,7 +96,8 @@ router.put('/:id', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  const appointment = await AppointmentService.update(id, result.data);
+  // Pass existing to avoid a second SELECT inside the service
+  const appointment = await AppointmentService.update(id, result.data, existing ?? undefined);
   return c.json(appointment);
 });
 
@@ -108,14 +110,16 @@ router.delete('/:id', async (c) => {
     return c.json(Errors.APPOINTMENT_DELETE_ONLY, 403);
   }
 
+  let existingForDelete: Awaited<ReturnType<typeof AppointmentService.getById>> | undefined;
   if (payload.type === 'company') {
-    const existing = await AppointmentService.getById(id);
-    if (!existing) return c.json(Errors.NOT_FOUND, 404);
-    if (existing.companyPhone !== (payload.companyPhone ?? payload.phone))
+    existingForDelete = await AppointmentService.getById(id);
+    if (!existingForDelete) return c.json(Errors.NOT_FOUND, 404);
+    if (existingForDelete.companyPhone !== (payload.companyPhone ?? payload.phone))
       return c.json(Errors.UNAUTHORIZED, 403);
   }
 
-  await AppointmentService.delete(id);
+  // Pass existing to avoid a second SELECT inside the service
+  await AppointmentService.delete(id, existingForDelete ?? undefined);
   return c.json({ message: 'Deleted' });
 });
 
