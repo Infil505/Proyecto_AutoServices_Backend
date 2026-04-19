@@ -34,7 +34,7 @@ const getConfig = (): Config => {
   const databaseUrl = process.env.DATABASE_URL || '';
   const logLevel = process.env.LOG_LEVEL || 'info';
   const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',');
-  const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
+  const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX || (nodeEnv === 'development' ? '2000' : '100'), 10);
   const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10); // 15 minutes
   const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
   const shutdownUser = process.env.SHUTDOWN_USER || 'admin_shutdown';

@@ -53,6 +53,14 @@ async function isAllowed(ip: string, windowMs: number, maxRequests: number): Pro
   return entry.count <= maxRequests;
 }
 
+/**
+ * Check if a given key (IP or user phone) is within its rate limit.
+ * Exported so the JWT middleware can do per-user limiting after auth.
+ */
+export async function checkRateLimit(key: string, windowMs: number, maxRequests: number): Promise<boolean> {
+  return isAllowed(key, windowMs, maxRequests);
+}
+
 export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000): MiddlewareHandler => {
   return async (c, next) => {
     // Only trust proxy headers when TRUST_PROXY=true (i.e. behind Cloudflare/Nginx)
@@ -61,8 +69,12 @@ export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000): Middlew
       ? (c.req.header('CF-Connecting-IP') ||
          c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
          c.req.header('X-Real-IP') ||
+         c.env.clientIp ||   // direct TCP IP from Bun (fallback when no proxy headers)
          'unknown')
-      : 'unknown';
+      : (c.env.clientIp || 'unknown');
+
+    // OPTIONS (CORS preflight) requests are browser-generated and harmless — skip counting
+    if (c.req.method === 'OPTIONS') return await next();
 
     if (!(await isAllowed(ip, windowMs, maxRequests))) {
       return c.json(Errors.TOO_MANY_REQUESTS, 429);

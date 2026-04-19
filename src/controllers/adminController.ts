@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { desc, gte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db/index.js';
+import { appointments, companies } from '../db/schema.js';
 import { getMetrics } from '../middleware/metrics.js';
 import { Errors } from '../utils/errors.js';
 import type { AppContext } from '../types.js';
@@ -77,26 +78,32 @@ router.get('/growth', async (c) => {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-  const rows = await db.execute<{ month: string; companies: string; appointments: string }>(sql`
-    SELECT
-      TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
-      COUNT(*) FILTER (WHERE source = 'company')     AS companies,
-      COUNT(*) FILTER (WHERE source = 'appointment') AS appointments
-    FROM (
-      SELECT created_at, 'company'     AS source FROM companies    WHERE created_at >= ${sixMonthsAgo}
-      UNION ALL
-      SELECT created_at, 'appointment' AS source FROM appointments WHERE created_at >= ${sixMonthsAgo}
-    ) combined
-    GROUP BY DATE_TRUNC('month', created_at)
-    ORDER BY month
-  `);
+  const [companyRows, apptRows] = await Promise.all([
+    db
+      .select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${companies.createdAt}), 'YYYY-MM')`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(companies)
+      .where(gte(companies.createdAt, sixMonthsAgo))
+      .groupBy(sql`DATE_TRUNC('month', ${companies.createdAt})`),
+    db
+      .select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${appointments.createdAt}), 'YYYY-MM')`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(appointments)
+      .where(gte(appointments.createdAt, sixMonthsAgo))
+      .groupBy(sql`DATE_TRUNC('month', ${appointments.createdAt})`),
+  ]);
 
-  const rowMap = new Map(rows.map(r => [r.month, { companies: Number(r.companies), appointments: Number(r.appointments) }]));
+  const companyMap = new Map(companyRows.map(r => [r.month, Number(r.count)]));
+  const apptMap    = new Map(apptRows.map(r => [r.month, Number(r.count)]));
 
   const data = monthLabels.map(month => ({
     month,
-    companies:    rowMap.get(month)?.companies    ?? 0,
-    appointments: rowMap.get(month)?.appointments ?? 0,
+    companies:    companyMap.get(month) ?? 0,
+    appointments: apptMap.get(month) ?? 0,
   }));
 
   cacheSet('admin:growth', data, GROWTH_TTL_MS);
@@ -111,24 +118,27 @@ router.get('/activity', async (c) => {
   const cached = cacheGet<object[]>('admin:activity');
   if (cached) return c.json(cached);
 
-  const rows = await db.execute<{
-    type: string; message: string; phone: string; created_at: string;
-  }>(sql`
-    SELECT type, message, phone, created_at FROM (
-      SELECT 'company_joined'     AS type, name     AS message, phone,        created_at::text FROM companies    ORDER BY created_at DESC LIMIT 5
-      UNION ALL
-      SELECT 'appointment_created' AS type, CONCAT('Appointment #', id) AS message, company_phone AS phone, created_at::text FROM appointments ORDER BY created_at DESC LIMIT 5
-    ) combined
-    ORDER BY created_at DESC
-    LIMIT 10
-  `);
+  const [recentCompanies, recentAppointments] = await Promise.all([
+    db.select().from(companies).orderBy(desc(companies.createdAt)).limit(5),
+    db.select().from(appointments).orderBy(desc(appointments.createdAt)).limit(5),
+  ]);
 
-  const events = rows.map(r => ({
-    type:      r.type as 'company_joined' | 'appointment_created',
-    message:   r.message,
-    phone:     r.phone,
-    createdAt: r.created_at,
-  }));
+  const events = [
+    ...recentCompanies.map(company => ({
+      type: 'company_joined' as const,
+      message: company.name,
+      phone: company.phone,
+      createdAt: company.createdAt?.toISOString() ?? new Date().toISOString(),
+    })),
+    ...recentAppointments.map(apt => ({
+      type: 'appointment_created' as const,
+      message: `Appointment #${apt.id}`,
+      phone: apt.companyPhone,
+      createdAt: apt.createdAt?.toISOString() ?? new Date().toISOString(),
+    })),
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10);
 
   cacheSet('admin:activity', events, ACTIVITY_TTL_MS);
   return c.json(events);

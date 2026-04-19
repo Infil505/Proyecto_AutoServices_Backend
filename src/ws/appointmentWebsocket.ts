@@ -18,19 +18,34 @@ type ClientInfo = {
 };
 const clients = new Map<WebSocket, ClientInfo>();
 
-function broadcast(event: string, appointment: { companyPhone?: string | null; technicianPhone?: string | null; [key: string]: unknown }) {
+type AppointmentLike = { companyPhone?: string | null; technicianPhone?: string | null; [key: string]: unknown };
+
+function clientCanReceive(user: ClientInfo, appointment: AppointmentLike): boolean {
+    const effectiveCompanyPhone = user.companyPhone ?? user.phone;
+    return (
+        user.type === 'super_admin' ||
+        (user.type === 'company' && appointment.companyPhone === effectiveCompanyPhone) ||
+        (user.type === 'technician' && appointment.technicianPhone === user.phone)
+    );
+}
+
+function broadcast(event: string, appointment: AppointmentLike) {
     const message = JSON.stringify({ type: event, appointment });
     for (const [ws, user] of clients) {
-        if (ws.readyState !== WebSocket.OPEN) {
-            clients.delete(ws);
-            continue;
-        }
-        const effectiveCompanyPhone = user.companyPhone ?? user.phone;
-        const canReceive =
-            user.type === 'super_admin' ||
-            (user.type === 'company' && appointment.companyPhone === effectiveCompanyPhone) ||
-            (user.type === 'technician' && appointment.technicianPhone === user.phone);
-        if (canReceive) ws.send(message);
+        if (ws.readyState !== WebSocket.OPEN) { clients.delete(ws); continue; }
+        if (clientCanReceive(user, appointment)) ws.send(message);
+    }
+}
+
+/**
+ * Notify affected clients their stats are stale so they re-fetch once.
+ * Avoids any polling on the frontend — data is pulled only when something changed.
+ */
+function broadcastStatsInvalidated(appointment: AppointmentLike) {
+    const message = JSON.stringify({ type: 'stats:invalidated' });
+    for (const [ws, user] of clients) {
+        if (ws.readyState !== WebSocket.OPEN) { clients.delete(ws); continue; }
+        if (clientCanReceive(user, appointment)) ws.send(message);
     }
 }
 
@@ -153,14 +168,17 @@ export function startAppointmentWebsocket() {
 
     AppointmentService.events.on('appointment:created', (appointment) => {
         broadcast('appointment:created', appointment);
+        broadcastStatsInvalidated(appointment);
     });
 
     AppointmentService.events.on('appointment:updated', (appointment) => {
         broadcast('appointment:updated', appointment);
+        broadcastStatsInvalidated(appointment);
     });
 
     AppointmentService.events.on('appointment:deleted', (appointment) => {
         broadcast('appointment:deleted', appointment);
+        broadcastStatsInvalidated(appointment);
     });
 
     AppointmentService.events.on('appointment:assigned', (appointment) => {

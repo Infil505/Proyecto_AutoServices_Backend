@@ -1,5 +1,8 @@
 // Context type for Hono with user payload
 export interface AppContext {
+  Bindings: {
+    clientIp?: string; // real TCP IP injected by Bun.serve, used by rate limiter
+  };
   Variables: {
     user?: {
       id: number;

@@ -3,7 +3,7 @@ import { Hono, type Context, type Next } from "hono";
 import logger from "./src/utils/logger.js";
 import { cors } from "hono/cors";
 import { config } from "./src/config/index.js";
-import { rateLimit } from "./src/middleware/validation.js";
+import { rateLimit, checkRateLimit } from "./src/middleware/validation.js";
 import { metricsMiddleware, createMetricsApp } from "./src/middleware/metrics.js";
 import { verifyJWT } from "./src/utils/jwt.js";
 import appointmentRoutes from "./src/routes/appointmentRoutes.js";
@@ -56,6 +56,12 @@ EmailService.startEmailListener();
 PushService.init();
 PushService.attachToEvents(AppointmentService.events);
 
+// Per-user rate limit: 300 req / 15 min per authenticated phone.
+// Runs after token verification so the key is always a real user identity,
+// not an IP that multiple users behind a NAT would share.
+const USER_RATE_LIMIT_MAX = 300;
+const USER_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
 // JWT verification middleware
 function jwtMiddleware(secret: string) {
   return async (c: Context<AppContext>, next: Next) => {
@@ -70,6 +76,9 @@ function jwtMiddleware(secret: string) {
     }
     if (payload.jti && await isBlacklisted(payload.jti as string)) {
       return c.json(Errors.TOKEN_REVOKED, 401);
+    }
+    if (!(await checkRateLimit(`user:${payload.phone}`, USER_RATE_LIMIT_WINDOW_MS, USER_RATE_LIMIT_MAX))) {
+      return c.json(Errors.TOO_MANY_REQUESTS, 429);
     }
     c.set("user", payload as AppContext["Variables"]["user"]);
     await next();
@@ -223,7 +232,10 @@ app.notFound((c) => {
 
 const server = Bun.serve({
   port: config.port,
-  fetch: app.fetch,
+  fetch: (req, bunServer) => {
+    const ipInfo = bunServer.requestIP(req);
+    return app.fetch(req, { clientIp: ipInfo?.address ?? 'unknown' });
+  },
 });
 
 logger.info(`AutoServices REST API running on http://localhost:${config.port}`);
