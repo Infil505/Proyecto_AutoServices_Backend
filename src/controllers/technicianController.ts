@@ -6,6 +6,17 @@ import { technicianSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const TECHNICIANS_LIST_TTL = 30_000;
+
+function invalidateTechniciansCache(companyPhone?: string): void {
+  if (companyPhone) {
+    cacheDeletePrefix(`technicians:co:${companyPhone}:`);
+  } else {
+    cacheDeletePrefix('technicians:');
+  }
+}
 
 const router = new Hono<AppContext>();
 
@@ -14,16 +25,31 @@ router.get('/', async (c) => {
   const { page, limit, offset } = parsePagination(c);
 
   if (payload.type === 'technician') {
+    const cacheKey = `technicians:tech:${payload.phone}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const technician = await TechnicianService.getById(payload.phone);
-    return c.json(createPaginatedResponse(technician ? [technician] : [], technician ? 1 : 0, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(technician ? [technician] : [], technician ? 1 : 0, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, TECHNICIANS_LIST_TTL);
+    return c.json(result);
   }
   if (payload.type === 'company') {
     const cp = payload.companyPhone ?? payload.phone;
+    const cacheKey = `technicians:co:${cp}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([TechnicianService.getByCompany(cp, { limit, offset }), TechnicianService.countByCompany(cp)]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, TECHNICIANS_LIST_TTL);
+    return c.json(result);
   }
+  const cacheKey = `technicians:admin:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
   const [data, total] = await Promise.all([TechnicianService.getAll({ limit, offset }), TechnicianService.countAll()]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, result, TECHNICIANS_LIST_TTL);
+  return c.json(result);
 });
 
 router.get('/:phone/availability', async (c) => {
@@ -90,7 +116,9 @@ router.post('/', async (c) => {
   if (!companyPhone) return c.json(Errors.TECHNICIAN_COMPANY_PHONE_REQUIRED, 400);
 
   try {
-    return c.json(await TechnicianService.register({ ...result.data, companyPhone }), 201);
+    const created = await TechnicianService.register({ ...result.data, companyPhone });
+    invalidateTechniciansCache(companyPhone);
+    return c.json(created, 201);
   } catch (err) {
     const mapped = handleDbError(err);
     return c.json({ error: mapped.error }, mapped.status as any);
@@ -119,7 +147,9 @@ router.put('/:phone', async (c) => {
     if (activeCount > 0) return c.json(Errors.TECHNICIAN_HAS_ACTIVE_APPOINTMENTS, 409);
   }
 
-  return c.json(await TechnicianService.update(phone, result.data));
+  const updated = await TechnicianService.update(phone, result.data);
+  invalidateTechniciansCache(updated.companyPhone ?? undefined);
+  return c.json(updated);
 });
 
 router.delete('/:phone', async (c) => {
@@ -127,12 +157,14 @@ router.delete('/:phone', async (c) => {
   const payload = c.var.user!;
 
   if (payload.type === 'technician' && payload.phone !== phone) return c.json(Errors.TECHNICIAN_OWN_DELETE, 403);
+  let techForDelete: Awaited<ReturnType<typeof TechnicianService.getById>> | undefined;
   if (payload.type === 'company') {
-    const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.TECHNICIAN_OWN_COMPANY_DELETE, 403);
+    techForDelete = await TechnicianService.getById(phone);
+    if (!techForDelete || techForDelete.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.TECHNICIAN_OWN_COMPANY_DELETE, 403);
   }
 
   await TechnicianService.delete(phone);
+  invalidateTechniciansCache(techForDelete?.companyPhone ?? undefined);
   return c.json({ message: 'Deleted' });
 });
 

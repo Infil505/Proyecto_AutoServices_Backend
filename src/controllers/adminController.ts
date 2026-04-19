@@ -23,6 +23,9 @@ router.use('*', async (c, next) => {
  * Returns system health data: uptime, memory, response times, DB latency.
  */
 router.get('/metrics', async (c) => {
+  const cached = cacheGet<object>('admin:metrics');
+  if (cached) return c.json(cached);
+
   const dbStart = Date.now();
   try {
     await db.execute(sql`SELECT 1`);
@@ -34,7 +37,7 @@ router.get('/metrics', async (c) => {
   const m = getMetrics();
   const mem = process.memoryUsage();
 
-  return c.json({
+  const data = {
     uptime: Date.now() - m.startTime,
     memory: {
       used: mem.heapUsed,
@@ -54,7 +57,9 @@ router.get('/metrics', async (c) => {
       status: 'online',
       latencyMs: dbLatency,
     },
-  });
+  };
+  cacheSet('admin:metrics', data, 10_000); // 10s — live enough for admin dashboard
+  return c.json(data);
 });
 
 /**

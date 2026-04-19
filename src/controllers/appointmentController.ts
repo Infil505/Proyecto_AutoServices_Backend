@@ -6,6 +6,17 @@ import { appointmentSchema, technicianStatusSchema, adminStatusSchema } from '..
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const APPOINTMENTS_LIST_TTL = 5_000; // 5s — short TTL; WS keeps frontend fresh on mutations
+
+export function invalidateAppointmentsCache(companyPhone?: string): void {
+  if (companyPhone) {
+    cacheDeletePrefix(`appointments:co:${companyPhone}:`);
+  } else {
+    cacheDeletePrefix('appointments:');
+  }
+}
 
 const router = new Hono<AppContext>();
 
@@ -14,25 +25,40 @@ router.get('/', async (c) => {
   const { page, limit, offset } = parsePagination(c);
 
   if (payload.type === 'technician') {
+    const cacheKey = `appointments:tech:${payload.phone}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([
       AppointmentService.getByTechnicianWithDetails(payload.phone, { limit, offset }),
       AppointmentService.countByTechnician(payload.phone),
     ]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, APPOINTMENTS_LIST_TTL);
+    return c.json(result);
   }
   if (payload.type === 'company') {
     const cp = payload.companyPhone ?? payload.phone;
+    const cacheKey = `appointments:co:${cp}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([
       AppointmentService.getByCompanyWithDetails(cp, { limit, offset }),
       AppointmentService.countByCompany(cp),
     ]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, APPOINTMENTS_LIST_TTL);
+    return c.json(result);
   }
+  const cacheKey = `appointments:admin:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
   const [data, total] = await Promise.all([
     AppointmentService.getAllWithDetails({ limit, offset }),
     AppointmentService.countAll(),
   ]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, result, APPOINTMENTS_LIST_TTL);
+  return c.json(result);
 });
 
 router.get('/:id', async (c) => {
@@ -68,6 +94,7 @@ router.post('/', async (c) => {
   }
 
   const appointment = await AppointmentService.create(result.data);
+  invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
   return c.json(appointment, 201);
 });
 
@@ -98,6 +125,7 @@ router.put('/:id', async (c) => {
 
   // Pass existing to avoid a second SELECT inside the service
   const appointment = await AppointmentService.update(id, result.data, existing ?? undefined);
+  invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
   return c.json(appointment);
 });
 
@@ -118,8 +146,9 @@ router.delete('/:id', async (c) => {
       return c.json(Errors.UNAUTHORIZED, 403);
   }
 
-  // Pass existing to avoid a second SELECT inside the service
+  const companyPhone = existingForDelete?.companyPhone;
   await AppointmentService.delete(id, existingForDelete ?? undefined);
+  invalidateAppointmentsCache(companyPhone ?? undefined);
   return c.json({ message: 'Deleted' });
 });
 

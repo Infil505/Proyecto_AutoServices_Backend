@@ -56,10 +56,10 @@ EmailService.startEmailListener();
 PushService.init();
 PushService.attachToEvents(AppointmentService.events);
 
-// Per-user rate limit: 300 req / 15 min per authenticated phone.
-// Runs after token verification so the key is always a real user identity,
-// not an IP that multiple users behind a NAT would share.
-const USER_RATE_LIMIT_MAX = 300;
+// Per-user rate limit: 300 req / 15 min per authenticated phone (production).
+// Development is relaxed because stress tests share 3 tokens across all VUs —
+// in production each real user has their own token and their own bucket.
+const USER_RATE_LIMIT_MAX = config.nodeEnv === 'production' ? 300 : 100_000;
 const USER_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 // JWT verification middleware
@@ -85,6 +85,27 @@ function jwtMiddleware(secret: string) {
   };
 }
 
+// Overload protection — reject immediately when too many requests are in-flight.
+// Prevents the JS event loop from drowning in queued DB promises when the pool
+// is exhausted, which would otherwise starve even cache-hit responses.
+// At pool=20 and Supabase latency ~300ms, sustainable throughput is ~67 req/s.
+// A queue depth of 30 adds at most one extra 300ms batch — anything more causes
+// cascading timeouts. /health is exempt so monitoring always passes.
+let _inFlight = 0;
+const MAX_IN_FLIGHT = config.nodeEnv === 'production' ? 50 : 200;
+app.use("*", async (c, next) => {
+  if (c.req.path === '/health' || c.req.path === '/metrics') return await next();
+  if (_inFlight >= MAX_IN_FLIGHT) {
+    return c.json({ error: 'Service temporarily overloaded, please retry' }, 503);
+  }
+  _inFlight++;
+  try {
+    await next();
+  } finally {
+    _inFlight--;
+  }
+});
+
 // Request logging + metrics
 app.use("*", async (c, next) => {
   const start = Date.now();
@@ -98,11 +119,19 @@ app.use("*", metricsMiddleware());
 // CORS middleware
 app.use("*", cors({ origin: config.corsOrigins }));
 
-// Rate limiting
-app.use("*", rateLimit(config.rateLimitMax, config.rateLimitWindowMs));
+// Rate limiting — /health excluded (monitoring/health-checks must always pass)
+app.use("*", async (c, next) => {
+  if (c.req.path === '/health') return await next();
+  return rateLimit(config.rateLimitMax, config.rateLimitWindowMs)(c, next);
+});
 
 // Stricter rate limit for auth endpoints (20 req / 15 min per IP) to mitigate brute force
-const authRateLimit = rateLimit(20, config.rateLimitWindowMs);
+// In production: 20 login attempts / 15 min (brute-force protection).
+// In development: relaxed so stress tests and repeated manual logins don't block.
+const authRateLimit = rateLimit(
+  config.nodeEnv === 'production' ? 20 : 500,
+  config.rateLimitWindowMs,
+);
 app.use("/api/v1/auth", authRateLimit);
 app.use("/api/v1/auth/*", authRateLimit);
 
@@ -232,9 +261,13 @@ app.notFound((c) => {
 
 const server = Bun.serve({
   port: config.port,
+  idleTimeout: 30,
   fetch: (req, bunServer) => {
-    const ipInfo = bunServer.requestIP(req);
-    return app.fetch(req, { clientIp: ipInfo?.address ?? 'unknown' });
+    let clientIp = 'unknown';
+    try {
+      clientIp = bunServer.requestIP(req)?.address ?? 'unknown';
+    } catch { /* socket may already be closed on high-load aborted requests */ }
+    return app.fetch(req, { clientIp });
   },
 });
 
