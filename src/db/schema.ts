@@ -87,6 +87,7 @@ export const appointments = pgTable('appointments', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   coordinates: jsonb('coordinates'),
   serviceId: bigint('service_id', { mode: 'number' }).references(() => services.id),
+  description: text('description'),
   estatusTecnico: boolean('estatus_tecnico'),
   estatusAdministrador: boolean('estatus_administrador'),
 }, (t) => ({
@@ -94,6 +95,7 @@ export const appointments = pgTable('appointments', {
   technicianPhoneIdx: index('idx_appointments_technician_phone').on(t.technicianPhone),
   statusIdx:          index('idx_appointments_status').on(t.status),
   createdAtIdx:       index('idx_appointments_created_at').on(t.createdAt),
+  appointmentDateIdx: index('idx_appointments_appointment_date').on(t.appointmentDate),
 }));
 
 export const coverageZones = pgTable('coverage_zones', {
@@ -127,7 +129,9 @@ export const users = pgTable('users', {
   companyPhone: text('company_phone').references(() => companies.phone, { onDelete: 'cascade' }),
   passwordHash: text('password_hash').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (t) => ({
+  phoneIdx: index('idx_users_phone').on(t.phone),
+}));
 
 export const sessions = pgTable('sessions', {
   id: serial('id').primaryKey(),

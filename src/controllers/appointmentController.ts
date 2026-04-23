@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { AppointmentService } from '../services/appointmentService.js';
+import { CalendarService, type CalendarEventInput } from '../services/calendarService.js';
 import { PdfService } from '../services/pdfService.js';
 import type { AppContext } from '../types.js';
 import { appointmentSchema, technicianStatusSchema, adminStatusSchema } from '../validation/schemas.js';
@@ -9,6 +10,64 @@ import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 
 const APPOINTMENTS_LIST_TTL = 5_000; // 5s — short TTL; WS keeps frontend fresh on mutations
+
+function safeMeta(raw: unknown): Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+}
+
+async function syncCalendarAsync(
+  appointmentId: number,
+  appointment: { appointmentDate: string | null; startTime: string | null; metadata: unknown },
+  mode: 'create' | 'update',
+): Promise<void> {
+  if (!appointment.appointmentDate || !appointment.startTime) return;
+  const full = await AppointmentService.getFullById(appointmentId);
+  if (!full) return;
+  const meta = safeMeta(appointment.metadata);
+  const existingEventId = meta.calendarEventId as string | undefined;
+  const calResult = mode === 'update' && existingEventId
+    ? await CalendarService.updateEvent(existingEventId, buildCalendarInput(full))
+    : await CalendarService.createEvent(buildCalendarInput(full));
+  if (!calResult) return;
+  await AppointmentService.update(appointmentId, {
+    content: calResult.htmlLink,
+    metadata: { ...meta, calendarEventId: calResult.eventId },
+  }, full.appointment);
+}
+
+function buildCalendarInput(
+  full: NonNullable<Awaited<ReturnType<typeof AppointmentService.getFullById>>>
+): CalendarEventInput {
+  const { appointment, customer, technician, service, company } = full;
+  const clientName = customer?.name ?? appointment.customerPhone ?? 'Cliente';
+  const techName = technician?.name ?? '';
+  const duration = service?.estimatedDurationMinutes ?? 60;
+
+  const attendees: string[] = [];
+  if (customer?.email) attendees.push(customer.email);
+  if (technician?.email) attendees.push(technician.email);
+  if (company?.email) attendees.push(company.email);
+
+  const descLines: string[] = [];
+  if (appointment.description) descLines.push(appointment.description);
+  if (service?.name) descLines.push(`Servicio: ${service.name}`);
+  if (techName) descLines.push(`Técnico: ${techName}`);
+  if (appointment.customerPhone) descLines.push(`Tel cliente: ${appointment.customerPhone}`);
+  if (company?.name) descLines.push(`Empresa: ${company.name}`);
+
+  const coords = appointment.coordinates as { lat?: number; lng?: number } | null;
+  const location = coords?.lat && coords?.lng ? `${coords.lat},${coords.lng}` : undefined;
+
+  return {
+    title: `Cita - ${clientName}${techName ? ` | ${techName}` : ''}`,
+    description: descLines.join('\n'),
+    date: appointment.appointmentDate!,
+    startTime: appointment.startTime!,
+    durationMinutes: duration,
+    location,
+    attendeeEmails: attendees.length ? attendees : undefined,
+  };
+}
 
 export function invalidateAppointmentsCache(companyPhone?: string): void {
   if (companyPhone) {
@@ -94,7 +153,9 @@ router.post('/', async (c) => {
   }
 
   const appointment = await AppointmentService.create(result.data);
+  if (!appointment) return c.json(Errors.NOT_FOUND, 500);
   invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
+  void syncCalendarAsync(appointment.id, appointment, 'create');
   return c.json(appointment, 201);
 });
 
@@ -125,7 +186,9 @@ router.put('/:id', async (c) => {
 
   // Pass existing to avoid a second SELECT inside the service
   const appointment = await AppointmentService.update(id, result.data, existing ?? undefined);
+  if (!appointment) return c.json(Errors.NOT_FOUND, 404);
   invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
+  void syncCalendarAsync(appointment.id, appointment, 'update');
   return c.json(appointment);
 });
 
@@ -147,8 +210,11 @@ router.delete('/:id', async (c) => {
   }
 
   const companyPhone = existingForDelete?.companyPhone;
+  const deleteEventId = safeMeta(existingForDelete?.metadata).calendarEventId as string | undefined;
+
   await AppointmentService.delete(id, existingForDelete ?? undefined);
   invalidateAppointmentsCache(companyPhone ?? undefined);
+  if (deleteEventId) void CalendarService.deleteEvent(deleteEventId);
   return c.json({ message: 'Deleted' });
 });
 

@@ -60,29 +60,31 @@ router.get('/:phone/availability', async (c) => {
   if (payload.type === 'technician' && payload.phone !== phone) {
     return c.json(Errors.TECHNICIAN_OWN_AVAILABILITY, 403);
   }
-  if (payload.type === 'company') {
-    const technician = await TechnicianService.getById(phone);
-    if (!technician || technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
-      return c.json(Errors.TECHNICIAN_OWN_COMPANY_ACCESS, 403);
-    }
-  }
 
+  // Single query — reused for both permission check and response
   const technician = await TechnicianService.getById(phone);
   if (!technician) return c.json(Errors.NOT_FOUND, 404);
 
-  const occupied = date
-    ? await AppointmentService.getByTechnicianAndDate(phone, date)
-    : [];
+  if (payload.type === 'company' && technician.companyPhone !== (payload.companyPhone ?? payload.phone)) {
+    return c.json(Errors.TECHNICIAN_OWN_COMPANY_ACCESS, 403);
+  }
+
+  const availCacheKey = `availability:${phone}:${date ?? 'all'}`;
+  const cachedSlots = cacheGet<Array<{ appointmentId: number; startTime: string | null; status: string | null }>>(availCacheKey);
+
+  const occupiedSlots = cachedSlots ?? await (async () => {
+    if (!date) return [];
+    const rows = await AppointmentService.getByTechnicianAndDate(phone, date);
+    const slots = rows.map(a => ({ appointmentId: a.id, startTime: a.startTime, status: a.status }));
+    cacheSet(availCacheKey, slots, 60_000);
+    return slots;
+  })();
 
   return c.json({
     technicianPhone: phone,
     available: technician.available ?? true,
     date: date ?? null,
-    occupiedSlots: occupied.map(a => ({
-      appointmentId: a.id,
-      startTime: a.startTime,
-      status: a.status,
-    })),
+    occupiedSlots,
   });
 });
 
@@ -148,6 +150,7 @@ router.put('/:phone', async (c) => {
   }
 
   const updated = await TechnicianService.update(phone, result.data);
+  if (!updated) return c.json(Errors.NOT_FOUND, 404);
   invalidateTechniciansCache(updated.companyPhone ?? undefined);
   return c.json(updated);
 });

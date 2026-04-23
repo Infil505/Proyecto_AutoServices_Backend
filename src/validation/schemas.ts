@@ -75,6 +75,7 @@ export const appointmentSchema = z.object({
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
   status: appointmentStatusEnum.optional(),
+  description: z.string().max(2000).optional(),
   content: z.string().max(2000).optional(),
 });
 

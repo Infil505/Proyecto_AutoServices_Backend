@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
@@ -11,6 +12,16 @@ import { checkLoginAllowed, recordFailedAttempt, resetLoginAttempts } from '../u
 import { config } from '../config/index.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+
+function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
+  setCookie(c, 'refreshToken', token, {
+    httpOnly: true,
+    sameSite: 'Strict',
+    path: '/api/v1/auth',
+    maxAge: parseExpiresIn(config.jwtRefreshExpiresIn),
+    secure: config.nodeEnv === 'production',
+  });
+}
 
 const router = new Hono<AppContext>();
 
@@ -91,20 +102,21 @@ router.post('/login', async (c) => {
   }
 
   resetLoginAttempts(phone);
-  return c.json({ user: auth.user, token: auth.token, refreshToken: auth.refreshToken });
+  setRefreshCookie(c, auth.refreshToken);
+  return c.json({ user: auth.user, token: auth.token });
 });
 
 /**
  * POST /api/auth/refresh
- * Public. Exchanges a valid refresh token for a new access token.
+ * Public. Exchanges the httpOnly refreshToken cookie for a new access token.
  */
 router.post('/refresh', async (c) => {
-  const body = await c.req.json().catch(() => null);
-  if (!body?.refreshToken || typeof body.refreshToken !== 'string') {
+  const refreshToken = getCookie(c, 'refreshToken');
+  if (!refreshToken) {
     return c.json(Errors.REFRESH_TOKEN_REQUIRED, 400);
   }
 
-  const payload = await verifyJWT(body.refreshToken, config.jwtSecret);
+  const payload = await verifyJWT(refreshToken, config.jwtSecret);
   if (!payload || payload.tokenType !== 'refresh') {
     return c.json(Errors.INVALID_REFRESH_TOKEN, 401);
   }
@@ -148,14 +160,18 @@ router.post('/logout', async (c) => {
   // Revoke the access token that was used to authenticate this request.
   await blacklistToken(user.jti);
 
-  // Optionally revoke the refresh token if the client sends it.
+  // Revoke the refresh token from the httpOnly cookie (preferred) or body (fallback).
   const body = await c.req.json().catch(() => null);
-  if (body?.refreshToken && typeof body.refreshToken === 'string') {
-    const refreshPayload = await verifyJWT(body.refreshToken, config.jwtSecret);
+  const rawRefreshToken = getCookie(c, 'refreshToken') ?? (
+    typeof body?.refreshToken === 'string' ? body.refreshToken : null
+  );
+  if (rawRefreshToken) {
+    const refreshPayload = await verifyJWT(rawRefreshToken, config.jwtSecret);
     if (refreshPayload?.jti && refreshPayload.tokenType === 'refresh') {
       await blacklistToken(refreshPayload.jti as string);
     }
   }
+  deleteCookie(c, 'refreshToken', { path: '/api/v1/auth' });
 
   return c.json({ message: 'Logged out successfully' });
 });

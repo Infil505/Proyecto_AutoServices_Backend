@@ -1,7 +1,4 @@
-import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { db } from '../db/index.js';
-import { companies } from '../db/schema.js';
 import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
@@ -35,16 +32,11 @@ router.get('/', async (c) => {
   const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
   if (cached) return c.json(cached);
 
-  type Row = typeof companies.$inferSelect & { total_count: string };
-  const rows = await db.execute<Row>(sql`
-    SELECT *, COUNT(*) OVER()::int AS total_count
-    FROM companies
-    ORDER BY created_at DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `);
+  const [data, total] = await Promise.all([
+    CompanyService.getAll({ limit, offset }),
+    CompanyService.countAll(),
+  ]);
 
-  const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
-  const data = rows.map(({ total_count: _, ...rest }) => rest);
   const response = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
   cacheSet(cacheKey, response, COMPANIES_LIST_TTL_MS);
   return c.json(response);

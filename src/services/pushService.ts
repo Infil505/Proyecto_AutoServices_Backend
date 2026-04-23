@@ -69,6 +69,7 @@ export class PushService {
     });
 
     const toRemove: string[] = [];
+    const sends: Promise<void>[] = [];
 
     for (const [endpoint, record] of subscriptions) {
       const effectiveCompanyPhone = record.companyPhone ?? record.userPhone;
@@ -79,17 +80,19 @@ export class PushService {
 
       if (!canReceive) continue;
 
-      try {
-        await webpush.sendNotification(record.subscription, payload);
-      } catch (err: unknown) {
-        const e = err as { statusCode?: number; message?: string };
-        if (e.statusCode === 410 || e.statusCode === 404) {
-          toRemove.push(endpoint);
-        } else {
-          logger.warn(`Push failed for ${record.userPhone}: ${e.message}`);
-        }
-      }
+      sends.push(
+        webpush.sendNotification(record.subscription, payload).then(() => {}).catch((err: unknown) => {
+          const e = err as { statusCode?: number; message?: string };
+          if (e.statusCode === 410 || e.statusCode === 404) {
+            toRemove.push(endpoint);
+          } else {
+            logger.warn(`Push failed for ${record.userPhone}: ${e.message}`);
+          }
+        })
+      );
     }
+
+    await Promise.all(sends);
 
     for (const endpoint of toRemove) {
       subscriptions.delete(endpoint);

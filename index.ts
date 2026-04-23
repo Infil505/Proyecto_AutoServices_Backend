@@ -1,7 +1,9 @@
 import { timingSafeEqual } from "crypto";
 import { Hono, type Context, type Next } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import logger from "./src/utils/logger.js";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { config } from "./src/config/index.js";
 import { rateLimit, checkRateLimit } from "./src/middleware/validation.js";
 import { metricsMiddleware, createMetricsApp } from "./src/middleware/metrics.js";
@@ -116,8 +118,14 @@ app.use("*", async (c, next) => {
 });
 app.use("*", metricsMiddleware());
 
-// CORS middleware
-app.use("*", cors({ origin: config.corsOrigins }));
+// Body size limit — rejects payloads > 1MB before parsing JSON
+app.use("*", bodyLimit({ maxSize: 1024 * 1024 }));
+
+// Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, etc.)
+app.use("*", secureHeaders());
+
+// CORS middleware — credentials:true is required for the browser to send the httpOnly refreshToken cookie
+app.use("*", cors({ origin: config.corsOrigins, credentials: true }));
 
 // Rate limiting — /health excluded (monitoring/health-checks must always pass)
 app.use("*", async (c, next) => {
@@ -250,7 +258,8 @@ app.get("/", (c) =>
 
 // Global error handler
 app.onError((err, c) => {
-  logger.error(`${c.req.method} ${c.req.path} — ${err.message}\n${err.stack}`);
+  const stack = config.nodeEnv !== 'production' ? `\n${err.stack}` : '';
+  logger.error(`${c.req.method} ${c.req.path} — ${err.message}${stack}`);
   return c.json(Errors.INTERNAL_ERROR, 500);
 });
 
