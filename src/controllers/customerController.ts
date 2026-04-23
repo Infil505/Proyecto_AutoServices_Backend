@@ -54,7 +54,9 @@ router.put('/:phone', async (c) => {
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
   }
-  return c.json(await CustomerService.update(phone, result.data));
+  const updated = await CustomerService.update(phone, result.data);
+  if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  return c.json(updated);
 });
 
 router.delete('/:phone', async (c) => {

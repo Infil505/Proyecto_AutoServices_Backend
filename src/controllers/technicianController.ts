@@ -118,9 +118,9 @@ router.post('/', async (c) => {
   if (!companyPhone) return c.json(Errors.TECHNICIAN_COMPANY_PHONE_REQUIRED, 400);
 
   try {
-    const created = await TechnicianService.register({ ...result.data, companyPhone });
+    const { technician, setupToken } = await TechnicianService.register({ ...result.data, companyPhone });
     invalidateTechniciansCache(companyPhone);
-    return c.json(created, 201);
+    return c.json({ technician, setupToken }, 201);
   } catch (err) {
     const mapped = handleDbError(err);
     return c.json({ error: mapped.error }, mapped.status as any);
@@ -149,7 +149,9 @@ router.put('/:phone', async (c) => {
     if (activeCount > 0) return c.json(Errors.TECHNICIAN_HAS_ACTIVE_APPOINTMENTS, 409);
   }
 
-  const updated = await TechnicianService.update(phone, result.data);
+  const { companyPhone: _stripped, ...updateWithoutCompanyPhone } = result.data;
+  const dataToUpdate = payload.type === 'super_admin' ? result.data : updateWithoutCompanyPhone;
+  const updated = await TechnicianService.update(phone, dataToUpdate);
   if (!updated) return c.json(Errors.NOT_FOUND, 404);
   invalidateTechniciansCache(updated.companyPhone ?? undefined);
   return c.json(updated);

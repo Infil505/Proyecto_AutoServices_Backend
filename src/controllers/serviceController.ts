@@ -54,7 +54,12 @@ router.post('/', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  return c.json(await ServiceService.create(result.data), 201);
+  const companyPhone = payload.type === 'company'
+    ? (payload.companyPhone ?? payload.phone)
+    : result.data.companyPhone;
+  if (!companyPhone) return c.json({ error: 'companyPhone is required' }, 400);
+
+  return c.json(await ServiceService.create({ ...result.data, companyPhone }), 201);
 });
 
 router.put('/:id', async (c) => {
@@ -77,7 +82,11 @@ router.put('/:id', async (c) => {
     if (!service || service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
   }
 
-  return c.json(await ServiceService.update(id, result.data));
+  const { companyPhone: _stripped, ...updateWithoutCompanyPhone } = result.data;
+  const dataToUpdate = payload.type === 'super_admin' ? result.data : updateWithoutCompanyPhone;
+  const updated = await ServiceService.update(id, dataToUpdate);
+  if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  return c.json(updated);
 });
 
 router.delete('/:id', async (c) => {

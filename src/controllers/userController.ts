@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { UserService } from '../services/userService.js';
+import { CompanyService } from '../services/companyService.js';
 import type { AppContext } from '../types.js';
 import { userSchema } from '../validation/schemas.js';
 import { parseIntParam } from '../utils/params.js';
@@ -49,6 +50,12 @@ router.post('/', async (c) => {
   }
 
   const { password, ...rest } = result.data;
+
+  if (rest.companyPhone) {
+    const company = await CompanyService.getById(rest.companyPhone);
+    if (!company) return c.json(Errors.NOT_FOUND, 404);
+  }
+
   const user = await UserService.create({ ...rest, passwordHash: password });
   return c.json(user, 201);
 });
@@ -78,6 +85,7 @@ router.put('/:id', async (c) => {
 
   const { password, ...rest } = result.data;
   const user = await UserService.update(id, { ...rest, ...(password ? { passwordHash: password } : {}) });
+  if (!user) return c.json(Errors.NOT_FOUND, 404);
   return c.json(user);
 });
 

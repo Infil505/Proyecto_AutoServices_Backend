@@ -1,8 +1,8 @@
-import bcrypt from 'bcrypt';
 import { count, eq } from 'drizzle-orm';
-import { config } from '../config/index.js';
 import { db } from '../db/index.js';
 import { companies, users } from '../db/schema.js';
+import { UserService } from './userService.js';
+import { sendInviteEmail } from '../utils/email.js';
 
 type Page = { limit: number; offset: number };
 
@@ -29,21 +29,28 @@ export class CompanyService {
   }
 
   static async register(data: {
-    phone: string; name: string; email?: string; password: string;
-    address?: string; startHour?: string; endHour?: string;
-  }) {
-    const hashedPassword = await bcrypt.hash(data.password, config.bcryptRounds);
-    return await db.transaction(async (tx) => {
+    company: { phone: string; name: string; email?: string; address?: string; startHour?: string; endHour?: string };
+    admin: { phone: string; name: string; email?: string };
+  }): Promise<{ company: typeof companies.$inferSelect; setupToken: string }> {
+    const { company, adminId } = await db.transaction(async (tx) => {
       const [company] = await tx.insert(companies).values({
-        phone: data.phone, name: data.name, email: data.email,
-        address: data.address, startHour: data.startHour, endHour: data.endHour,
+        phone: data.company.phone, name: data.company.name, email: data.company.email,
+        address: data.company.address, startHour: data.company.startHour, endHour: data.company.endHour,
       }).returning();
-      await tx.insert(users).values({
-        type: 'company', phone: data.phone, name: data.name,
-        email: data.email, companyPhone: data.phone, passwordHash: hashedPassword,
-      });
-      return company;
+      const [adminUser] = await tx.insert(users).values({
+        type: 'company', phone: data.admin.phone, name: data.admin.name,
+        email: data.admin.email, companyPhone: data.company.phone, passwordHash: null,
+      }).returning({ id: users.id });
+      return { company: company!, adminId: adminUser!.id };
     });
+
+    const setupToken = await UserService.generateSetupToken(adminId);
+
+    if (data.admin.email) {
+      await sendInviteEmail({ to: data.admin.email, name: data.admin.name, role: 'company', token: setupToken });
+    }
+
+    return { company, setupToken };
   }
 
   static async update(phone: string, data: Partial<typeof companies.$inferInsert>) {

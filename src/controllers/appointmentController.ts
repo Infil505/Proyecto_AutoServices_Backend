@@ -152,7 +152,15 @@ router.post('/', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  const appointment = await AppointmentService.create(result.data);
+  // For company role: always use companyPhone from JWT, ignore body value
+  // For super_admin: companyPhone must be provided in body
+  const companyPhone = payload.type === 'company'
+    ? (payload.companyPhone ?? payload.phone)
+    : result.data.companyPhone;
+
+  if (!companyPhone) return c.json({ error: 'companyPhone is required' }, 400);
+
+  const appointment = await AppointmentService.create({ ...result.data, companyPhone });
   if (!appointment) return c.json(Errors.NOT_FOUND, 500);
   invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
   void syncCalendarAsync(appointment.id, appointment, 'create');

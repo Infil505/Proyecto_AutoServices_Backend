@@ -22,6 +22,9 @@ export const Errors = {
   INVALID_REFRESH_TOKEN:      { status: 401, error: 'Invalid or expired refresh token' },
   REFRESH_TOKEN_REQUIRED:     { status: 400, error: 'refreshToken is required' },
   ONLY_SUPER_ADMIN:           { status: 403, error: 'Only super_admins can perform this action' },
+  ACCOUNT_NOT_ACTIVATED:      { status: 403, error: 'Account not yet activated. Check your email to set your password.' },
+  SETUP_TOKEN_INVALID:        { status: 400, error: 'Invalid or expired setup token' },
+  SETUP_TOKEN_ALREADY_USED:   { status: 409, error: 'Password already set for this account' },
 
   // ── Rate limiting ─────────────────────────────────────────────────────────────
   TOO_MANY_REQUESTS:          { status: 429, error: 'Too many requests' },

@@ -5,21 +5,29 @@ const passwordField = z.string().min(8).max(128);
 
 // Company self-registration (public)
 export const companyRegisterSchema = z.object({
-  phone: phoneField,
-  name: z.string().min(2).max(100),
-  email: z.string().email().optional(),
-  password: passwordField,
-  address: z.string().max(500).optional(),
-  startHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
-  endHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  company: z.object({
+    phone: phoneField,
+    name: z.string().min(2).max(100),
+    email: z.string().email().optional(),
+    address: z.string().max(500).optional(),
+    startHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+    endHour: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  }),
+  admin: z.object({
+    phone: phoneField,
+    name: z.string().min(2).max(100),
+    email: z.string().email().optional(),
+    // No password — admin receives an invite email to set their own password
+  }),
 });
 
-// Super admin creation (protected, super_admin only)
+// Company admin registration (protected, super_admin only)
 export const adminRegisterSchema = z.object({
   phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
-  password: passwordField,
+  // No password — admin receives an invite email to set their own password
+  companyPhone: phoneField,
 });
 
 // Company admin creation by super_admin for an existing company
@@ -27,6 +35,12 @@ export const companyAdminSchema = z.object({
   phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
+  // No password — admin receives an invite email to set their own password
+});
+
+// Password setup via invite token
+export const setupPasswordSchema = z.object({
+  token: z.string().min(1),
   password: passwordField,
 });
 
@@ -50,18 +64,19 @@ export const technicianSchema = z.object({
   phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
-  password: passwordField,
+  // No password — technician receives an invite email to set their own password
   companyPhone: phoneField.optional(), // required for super_admin; auto-set from JWT for company role
   available: z.boolean().optional(),
 });
 
 // Service validation schemas
 export const serviceSchema = z.object({
-  companyPhone: z.string().min(10).max(15),
+  companyPhone: z.string().min(10).max(15).optional(), // auto-filled from JWT for company role
   name: z.string().min(2).max(100),
   description: z.string().max(1000).optional(),
   category: z.string().max(50).optional(),
-  estimatedDurationMinutes: z.number().int().min(1).max(1440)
+  estimatedDurationMinutes: z.number().int().min(1).max(1440),
+  active: z.boolean().optional(),
 });
 
 // Appointment validation schemas
@@ -69,7 +84,7 @@ export const appointmentStatusEnum = z.enum(['pending', 'scheduled', 'confirmed'
 
 export const appointmentSchema = z.object({
   customerPhone: z.string().min(10).max(15).optional(),
-  companyPhone: z.string().min(10).max(15),
+  companyPhone: z.string().min(10).max(15).optional(),
   technicianPhone: z.string().min(10).max(15).optional(),
   serviceId: z.number().int().positive().optional(),
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -77,6 +92,7 @@ export const appointmentSchema = z.object({
   status: appointmentStatusEnum.optional(),
   description: z.string().max(2000).optional(),
   content: z.string().max(2000).optional(),
+  coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
 });
 
 // Status update schemas (dedicated endpoints, RBAC-isolated)
@@ -101,7 +117,7 @@ export const customerSchema = z.object({
 
 // Coverage zone validation schemas
 export const coverageZoneSchema = z.object({
-  companyPhone: z.string().min(10).max(15),
+  companyPhone: z.string().min(10).max(15).optional(), // auto-filled from JWT for company role
   state: z.string().min(2).max(50),
   city: z.string().min(2).max(100),
   zoneName: z.string().max(100).optional(),
@@ -150,4 +166,14 @@ export const userSchema = z.object({
   email: z.string().email().optional(),
   password: passwordField,
   type: z.enum(['super_admin', 'company', 'technician']),
+  companyPhone: phoneField.optional(),
+}).superRefine((data, ctx) => {
+  if (data.type === undefined) return;
+  if (data.type !== 'super_admin' && !data.companyPhone) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'companyPhone is required for company and technician users',
+      path: ['companyPhone'],
+    });
+  }
 });

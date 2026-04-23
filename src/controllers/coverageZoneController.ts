@@ -56,7 +56,12 @@ router.post('/', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  return c.json(await CoverageZoneService.create(result.data), 201);
+  const companyPhone = payload.type === 'company'
+    ? (payload.companyPhone ?? payload.phone)
+    : result.data.companyPhone;
+  if (!companyPhone) return c.json({ error: 'companyPhone is required' }, 400);
+
+  return c.json(await CoverageZoneService.create({ ...result.data, companyPhone }), 201);
 });
 
 router.put('/:id', async (c) => {
@@ -78,7 +83,11 @@ router.put('/:id', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  return c.json(await CoverageZoneService.update(id, result.data));
+  const { companyPhone: _stripped, ...updateWithoutCompanyPhone } = result.data;
+  const dataToUpdate = payload.type === 'company' ? updateWithoutCompanyPhone : result.data;
+  const updated = await CoverageZoneService.update(id, dataToUpdate);
+  if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  return c.json(updated);
 });
 
 router.delete('/:id', async (c) => {

@@ -49,9 +49,9 @@ router.post('/', async (c) => {
   return c.json(serviceSpecialty, 201);
 });
 
-router.delete('/:serviceId/:specialtyId', async (c) => {
-  const serviceId = parseIntParam(c.req.param('serviceId'));
-  const specialtyId = parseIntParam(c.req.param('specialtyId'));
+router.delete('/', async (c) => {
+  const serviceId = parseIntParam(c.req.query('serviceId') ?? '');
+  const specialtyId = parseIntParam(c.req.query('specialtyId') ?? '');
   if (!serviceId || !specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 

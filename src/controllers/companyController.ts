@@ -130,15 +130,14 @@ router.post('/:phone/admin', async (c) => {
   if (!result.success) return c.json(validationErrorBody(result.error), 400);
 
   try {
-    const user = await UserService.create({
-      type: 'company',
-      phone: result.data.phone,
-      name: result.data.name,
-      email: result.data.email,
-      companyPhone,
-      passwordHash: result.data.password,
-    });
-    return c.json({ user }, 201);
+    const { phone, name, email } = result.data;
+    const user = await UserService.create({ type: 'company', phone, name, email, companyPhone, passwordHash: null });
+    const setupToken = await UserService.generateSetupToken(user.id);
+    if (email) {
+      const { sendInviteEmail } = await import('../utils/email.js');
+      await sendInviteEmail({ to: email, name, role: 'company', token: setupToken });
+    }
+    return c.json({ user, setupToken }, 201);
   } catch (err) {
     const mapped = handleDbError(err);
     return c.json({ error: mapped.error }, mapped.status as any);

@@ -68,10 +68,10 @@ router.post('/', async (c) => {
   return c.json(technicianSpecialty, 201);
 });
 
-router.delete('/:technicianPhone/:specialtyId', async (c) => {
-  const technicianPhone = c.req.param('technicianPhone');
-  const specialtyId = parseIntParam(c.req.param('specialtyId'));
-  if (!specialtyId) return c.json(Errors.NOT_FOUND, 404);
+router.delete('/', async (c) => {
+  const technicianPhone = c.req.query('technicianPhone');
+  const specialtyId = parseIntParam(c.req.query('specialtyId') ?? '');
+  if (!technicianPhone || !specialtyId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type !== 'company' && payload.type !== 'super_admin') {

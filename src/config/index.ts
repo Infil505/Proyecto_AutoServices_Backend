@@ -16,6 +16,7 @@ interface Config {
   shutdownPassword: string;
   resendApiKey: string;
   resendFromEmail: string;
+  appUrl: string;
   redisUrl: string;
   metricsApiKey: string;
   trustProxy: boolean;
@@ -45,6 +46,7 @@ const getConfig = (): Config => {
   const shutdownPassword = process.env.SHUTDOWN_PASSWORD ?? '';
   const resendApiKey = process.env.RESEND_API_KEY || '';
   const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@autoservices.com';
+  const appUrl = process.env.APP_URL || corsOrigins[0] || 'http://localhost:3000';
   const redisUrl = process.env.REDIS_URL || '';
   const metricsApiKey = process.env.METRICS_API_KEY || '';
   // Defaults to false — must be explicitly enabled when a trusted reverse proxy is in place.
@@ -93,6 +95,7 @@ const getConfig = (): Config => {
     shutdownPassword,
     resendApiKey,
     resendFromEmail,
+    appUrl,
     redisUrl,
     metricsApiKey,
     trustProxy,

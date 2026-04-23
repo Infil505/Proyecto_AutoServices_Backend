@@ -3,7 +3,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { CompanyService } from '../services/companyService.js';
 import { UserService } from '../services/userService.js';
 import type { AppContext } from '../types.js';
-import { adminRegisterSchema, companyRegisterSchema, loginSchema } from '../validation/schemas.js';
+import { adminRegisterSchema, companyRegisterSchema, loginSchema, setupPasswordSchema } from '../validation/schemas.js';
 import { randomUUID } from 'crypto';
 import { verifyJWT, createJWT, parseExpiresIn } from '../utils/jwt.js';
 import { blacklistToken, isBlacklisted } from '../utils/tokenBlacklist.js';
@@ -39,8 +39,8 @@ router.post('/register/company', async (c) => {
   }
 
   try {
-    const company = await CompanyService.register(result.data);
-    return c.json({ company }, 201);
+    const { company, setupToken } = await CompanyService.register(result.data);
+    return c.json({ company, setupToken }, 201);
   } catch (err) {
     const mapped = handleDbError(err);
     return c.json({ error: mapped.error }, mapped.status as any);
@@ -49,7 +49,7 @@ router.post('/register/company', async (c) => {
 
 /**
  * POST /api/auth/register/admin
- * Protected — only super_admin can create another super_admin.
+ * Protected — only super_admin can create a company admin user.
  */
 router.post('/register/admin', async (c) => {
   const user = c.var.user;
@@ -65,10 +65,19 @@ router.post('/register/admin', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  const { phone, name, email, password } = result.data;
+  const { phone, name, email, companyPhone } = result.data;
+
+  const company = await CompanyService.getById(companyPhone);
+  if (!company) return c.json(Errors.NOT_FOUND, 404);
+
   try {
-    const admin = await UserService.create({ type: 'super_admin', phone, name, email, passwordHash: password });
-    return c.json({ user: admin }, 201);
+    const admin = await UserService.create({ type: 'company', phone, name, email, companyPhone, passwordHash: null });
+    const setupToken = await UserService.generateSetupToken(admin.id);
+    if (email) {
+      const { sendInviteEmail } = await import('../utils/email.js');
+      await sendInviteEmail({ to: email, name, role: 'company', token: setupToken });
+    }
+    return c.json({ user: admin, setupToken }, 201);
   } catch (err) {
     const mapped = handleDbError(err);
     return c.json({ error: mapped.error }, mapped.status as any);
@@ -96,6 +105,9 @@ router.post('/login', async (c) => {
   }
 
   const auth = await UserService.authenticate(phone, result.data.password);
+  if (auth === 'not_activated') {
+    return c.json(Errors.ACCOUNT_NOT_ACTIVATED, 403);
+  }
   if (!auth) {
     recordFailedAttempt(phone);
     return c.json(Errors.INVALID_CREDENTIALS, 401);
@@ -174,6 +186,34 @@ router.post('/logout', async (c) => {
   deleteCookie(c, 'refreshToken', { path: '/api/v1/auth' });
 
   return c.json({ message: 'Logged out successfully' });
+});
+
+/**
+ * POST /api/auth/setup-password
+ * Public. Validates an invite token and sets the user's password for the first time.
+ */
+router.post('/setup-password', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json(Errors.INVALID_JSON, 400);
+
+  const result = setupPasswordSchema.safeParse(body);
+  if (!result.success) return c.json(validationErrorBody(result.error), 400);
+
+  const { token, password } = result.data;
+
+  const payload = await verifyJWT(token, config.jwtSecret);
+  if (!payload || payload.tokenType !== 'setup' || typeof payload.userId !== 'number') {
+    return c.json(Errors.SETUP_TOKEN_INVALID, 400);
+  }
+
+  const user = await UserService.getById(payload.userId);
+  if (!user) return c.json(Errors.NOT_FOUND, 404);
+
+  const alreadySet = await UserService.hasPassword(payload.userId);
+  if (alreadySet) return c.json(Errors.SETUP_TOKEN_ALREADY_USED, 409);
+
+  await UserService.update(payload.userId, { passwordHash: password });
+  return c.json({ message: 'Password set successfully' });
 });
 
 export default router;

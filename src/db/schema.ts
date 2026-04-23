@@ -127,7 +127,7 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   email: text('email'),
   companyPhone: text('company_phone').references(() => companies.phone, { onDelete: 'cascade' }),
-  passwordHash: text('password_hash').notNull(),
+  passwordHash: text('password_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (t) => ({
   phoneIdx: index('idx_users_phone').on(t.phone),

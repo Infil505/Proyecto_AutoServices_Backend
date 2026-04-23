@@ -1,8 +1,8 @@
-import bcrypt from 'bcrypt';
 import { and, count, eq } from 'drizzle-orm';
-import { config } from '../config/index.js';
 import { db } from '../db/index.js';
 import { technicians, users } from '../db/schema.js';
+import { UserService } from './userService.js';
+import { sendInviteEmail } from '../utils/email.js';
 
 type Page = { limit: number; offset: number };
 
@@ -46,21 +46,28 @@ export class TechnicianService {
   }
 
   static async register(data: {
-    phone: string; name: string; email?: string; password: string;
+    phone: string; name: string; email?: string;
     companyPhone: string; available?: boolean;
-  }) {
-    const hashedPassword = await bcrypt.hash(data.password, config.bcryptRounds);
-    return await db.transaction(async (tx) => {
+  }): Promise<{ technician: typeof technicians.$inferSelect; setupToken: string }> {
+    const { technician, userId } = await db.transaction(async (tx) => {
       const [technician] = await tx.insert(technicians).values({
         phone: data.phone, name: data.name, email: data.email,
         companyPhone: data.companyPhone, available: data.available,
       }).returning();
-      await tx.insert(users).values({
+      const [userRow] = await tx.insert(users).values({
         type: 'technician', phone: data.phone, name: data.name,
-        email: data.email, passwordHash: hashedPassword,
-      });
-      return technician;
+        email: data.email, companyPhone: data.companyPhone, passwordHash: null,
+      }).returning({ id: users.id });
+      return { technician: technician!, userId: userRow!.id };
     });
+
+    const setupToken = await UserService.generateSetupToken(userId);
+
+    if (data.email) {
+      await sendInviteEmail({ to: data.email, name: data.name, role: 'technician', token: setupToken });
+    }
+
+    return { technician, setupToken };
   }
 
   static async update(phone: string, data: Partial<typeof technicians.$inferInsert>) {

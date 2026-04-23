@@ -121,11 +121,11 @@ router.post('/', async (c) => {
   return c.json(assignment, 201);
 });
 
-// DELETE /:technicianPhone/:zoneId — remove assignment (company or super_admin)
-router.delete('/:technicianPhone/:zoneId', async (c) => {
-  const technicianPhone = c.req.param('technicianPhone');
-  const zoneId = parseIntParam(c.req.param('zoneId'));
-  if (!zoneId) return c.json(Errors.NOT_FOUND, 404);
+// DELETE /?technicianPhone=&zoneId= — remove assignment (company or super_admin)
+router.delete('/', async (c) => {
+  const technicianPhone = c.req.query('technicianPhone');
+  const zoneId = parseIntParam(c.req.query('zoneId') ?? '');
+  if (!technicianPhone || !zoneId) return c.json(Errors.NOT_FOUND, 404);
   const payload = c.var.user!;
 
   if (payload.type === 'technician') {

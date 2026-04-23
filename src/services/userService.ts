@@ -34,7 +34,9 @@ export class UserService {
   }
 
   static async create(data: typeof users.$inferInsert) {
-    const hashedPassword = await bcrypt.hash(data.passwordHash, config.bcryptRounds);
+    const hashedPassword = data.passwordHash
+      ? await bcrypt.hash(data.passwordHash, config.bcryptRounds)
+      : null;
     const result = await db.insert(users).values({ ...data, passwordHash: hashedPassword }).returning();
     const { passwordHash: _, ...safe } = result[0]!;
     return safe;
@@ -45,18 +47,31 @@ export class UserService {
       data.passwordHash = await bcrypt.hash(data.passwordHash, config.bcryptRounds);
     }
     const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
-    const { passwordHash: _, ...safe } = result[0]!;
+    if (!result[0]) return null;
+    const { passwordHash: _, ...safe } = result[0];
     return safe;
+  }
+
+  static async hasPassword(id: number): Promise<boolean> {
+    const [row] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, id));
+    return !!row?.passwordHash;
+  }
+
+  static async generateSetupToken(userId: number): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    return createJWT({ userId, tokenType: 'setup', iat: now, exp: now + 86400 }, config.jwtSecret);
   }
 
   static async delete(id: number) {
     await db.delete(users).where(eq(users.id, id));
   }
 
-  static async authenticate(phone: string, password: string) {
+  static async authenticate(phone: string, password: string): Promise<'not_activated' | { user: Record<string, unknown>; token: string; refreshToken: string } | null> {
     const result = await db.select().from(users).where(eq(users.phone, phone));
     const user = result[0];
     if (!user) return null;
+
+    if (!user.passwordHash) return 'not_activated';
 
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) return null;
