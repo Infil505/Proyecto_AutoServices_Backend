@@ -143,16 +143,12 @@ const authRateLimit = rateLimit(
 app.use("/api/v1/auth", authRateLimit);
 app.use("/api/v1/auth/*", authRateLimit);
 
-// Public routes — no JWT required
-app.route("/api/v1/public", publicRoutes);
-
-// Public auth routes (register, login, refresh) — no JWT
-app.route("/api/v1/auth", authRoutes);
-
 // JWT middleware for protected routes.
 // Each prefix is registered twice: once for the collection endpoint (no trailing
 // segment) and once for sub-resource paths, because Hono's `/*` wildcard does
 // not match the base path without a trailing slash.
+// IMPORTANT: must be registered BEFORE app.route() calls so Hono executes it
+// before the route handlers (registration order determines execution order).
 const jwtProtect = jwtMiddleware(config.jwtSecret);
 const protectedPrefixes = [
   "/api/v1/auth/logout",
@@ -177,6 +173,12 @@ for (const prefix of protectedPrefixes) {
   app.use(prefix, jwtProtect);
   app.use(`${prefix}/*`, jwtProtect);
 }
+
+// Public routes — no JWT required
+app.route("/api/v1/public", publicRoutes);
+
+// Auth routes (public: register/login/refresh + protected: logout/register-admin)
+app.route("/api/v1/auth", authRoutes);
 
 // Protected routes
 app.route("/api/v1/appointments", appointmentRoutes);
