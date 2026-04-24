@@ -26,6 +26,7 @@ import publicRoutes from "./src/routes/publicRoutes.js";
 import docsRoutes from "./src/routes/docs.js";
 import type { AppContext } from "./src/types.js";
 import { Errors } from "./src/utils/errors.js";
+import { handleDbError } from "./src/utils/dbErrors.js";
 import { isBlacklisted } from "./src/utils/tokenBlacklist.js";
 import { startAppointmentWebsocket } from "./src/ws/appointmentWebsocket.js";
 import { EmailService } from "./src/services/emailService.js";
@@ -47,6 +48,18 @@ try {
 }
 
 const app = new Hono<AppContext>();
+
+// Global error handler — catches DB constraint errors that escape controller try/catch blocks.
+// handleDbError maps known PG codes (23505, 23503, 25P02…) to 4xx; re-throws unknowns.
+app.onError((err, c) => {
+  try {
+    const mapped = handleDbError(err);
+    return c.json({ error: mapped.error }, mapped.status as 400 | 409);
+  } catch {
+    logger.error(`Unhandled error on ${c.req.method} ${c.req.path}: ${String(err)}`);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
 
 // Start badge websocket feed for appointments (pub/sub)
 const wss = startAppointmentWebsocket();
@@ -258,12 +271,6 @@ app.get("/", (c) =>
   c.text("AutoServices Backend API - REST API with JWT Authentication"),
 );
 
-// Global error handler
-app.onError((err, c) => {
-  const stack = config.nodeEnv !== 'production' ? `\n${err.stack}` : '';
-  logger.error(`${c.req.method} ${c.req.path} — ${err.message}${stack}`);
-  return c.json(Errors.INTERNAL_ERROR, 500);
-});
 
 // 404 handler
 app.notFound((c) => {

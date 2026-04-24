@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { AppointmentService } from '../services/appointmentService.js';
 import { CalendarService, type CalendarEventInput } from '../services/calendarService.js';
+import { EmailService } from '../services/emailService.js';
 import { PdfService } from '../services/pdfService.js';
 import type { AppContext } from '../types.js';
 import { appointmentSchema, technicianStatusSchema, adminStatusSchema } from '../validation/schemas.js';
@@ -8,6 +9,7 @@ import { parsePagination, createPaginatedResponse } from '../utils/pagination.js
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+import logger from '../utils/logger.js';
 
 const APPOINTMENTS_LIST_TTL = 5_000; // 5s — short TTL; WS keeps frontend fresh on mutations
 
@@ -23,16 +25,30 @@ async function syncCalendarAsync(
   if (!appointment.appointmentDate || !appointment.startTime) return;
   const full = await AppointmentService.getFullById(appointmentId);
   if (!full) return;
+
   const meta = safeMeta(appointment.metadata);
   const existingEventId = meta.calendarEventId as string | undefined;
   const calResult = mode === 'update' && existingEventId
     ? await CalendarService.updateEvent(existingEventId, buildCalendarInput(full))
     : await CalendarService.createEvent(buildCalendarInput(full));
-  if (!calResult) return;
-  await AppointmentService.update(appointmentId, {
-    content: calResult.htmlLink,
-    metadata: { ...meta, calendarEventId: calResult.eventId },
-  }, full.appointment);
+
+  let calendarLink: string | undefined;
+  if (calResult) {
+    await AppointmentService.update(appointmentId, {
+      content: calResult.htmlLink,
+      metadata: { ...meta, calendarEventId: calResult.eventId },
+    }, full.appointment);
+    calendarLink = calResult.htmlLink;
+  }
+
+  // Send invitation emails to customer, technician and company on new appointments
+  if (mode === 'create') {
+    try {
+      await EmailService.sendAppointmentCreatedEmails(full, calendarLink);
+    } catch (err) {
+      logger.warn(`[syncCalendarAsync] Email notifications failed for appointment ${appointmentId}: ${err}`);
+    }
+  }
 }
 
 function buildCalendarInput(

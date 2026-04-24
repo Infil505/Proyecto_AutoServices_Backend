@@ -117,6 +117,9 @@ router.post('/', async (c) => {
   const companyPhone = payload.type === 'company' ? (payload.companyPhone ?? payload.phone) : result.data.companyPhone;
   if (!companyPhone) return c.json(Errors.TECHNICIAN_COMPANY_PHONE_REQUIRED, 400);
 
+  const alreadyExists = await TechnicianService.getById(result.data.phone);
+  if (alreadyExists) return c.json(Errors.DB_UNIQUE_VIOLATION, 409);
+
   try {
     const { technician, setupToken } = await TechnicianService.register({ ...result.data, companyPhone });
     invalidateTechniciansCache(companyPhone);

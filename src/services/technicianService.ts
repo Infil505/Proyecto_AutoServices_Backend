@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { technicians, users } from '../db/schema.js';
 import { UserService } from './userService.js';
 import { sendInviteEmail } from '../utils/email.js';
+import logger from '../utils/logger.js';
 
 type Page = { limit: number; offset: number };
 
@@ -64,7 +65,8 @@ export class TechnicianService {
     const setupToken = await UserService.generateSetupToken(userId);
 
     if (data.email) {
-      await sendInviteEmail({ to: data.email, name: data.name, role: 'technician', token: setupToken });
+      void sendInviteEmail({ to: data.email, name: data.name, role: 'technician', token: setupToken })
+        .catch((err) => logger.warn(`[TechnicianService.register] Failed to send invite email to ${data.email}: ${err}`));
     }
 
     return { technician, setupToken };

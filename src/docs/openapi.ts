@@ -39,7 +39,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'AutoServices API',
-    version: '1.3.0',
+    version: '1.4.0',
     description:
       'REST API for the AutoServices appointment and service management system.\n\n' +
       '**Authentication:** All endpoints except `/auth/register/company`, `/auth/login`, `/auth/refresh`, `/public/*` and `/health` require a `Bearer <access_token>` JWT.\n\n' +
@@ -251,7 +251,7 @@ export const openApiSpec = {
           },
         },
         responses: {
-          ...r201({ type: 'object', properties: { company: { $ref: '#/components/schemas/Company' } } }),
+          ...r201({ type: 'object', properties: { company: { $ref: '#/components/schemas/Company' }, setupToken: { type: 'string', description: 'One-time token for the admin to set their password via POST /auth/setup' } } }),
           ...r400,
           ...r409,
         },
@@ -789,7 +789,7 @@ export const openApiSpec = {
       post: {
         tags: ['Technicians'],
         summary: 'Create technician',
-        description: 'Creates a technician record and its user account.',
+        description: 'Creates a technician record and its user account. The technician receives an invite email with a one-time `setupToken` to set their own password.',
         security: bearerAuth,
         requestBody: {
           required: true,
@@ -797,20 +797,24 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['phone', 'name', 'password'],
+                required: ['phone', 'name'],
                 properties: {
                   phone: { type: 'string', example: '+1122334455' },
                   name: { type: 'string' },
                   email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 8 },
                   companyPhone: { type: 'string', description: 'Required for super_admin; auto-set from JWT for company role' },
-                  available: { type: 'boolean' },
+                  available: { type: 'boolean', default: true },
                 },
               },
             },
           },
         },
-        responses: { ...r201({ $ref: '#/components/schemas/Technician' }), ...r400, ...protectedResponses, ...r409 },
+        responses: {
+          ...r201({ type: 'object', properties: { technician: { $ref: '#/components/schemas/Technician' }, setupToken: { type: 'string', description: 'One-time token for the technician to set their password via POST /auth/setup' } } }),
+          ...r400,
+          ...protectedResponses,
+          ...r409,
+        },
       },
     },
     '/api/v1/technicians/{phone}': {

@@ -12,6 +12,7 @@ import { checkLoginAllowed, recordFailedAttempt, resetLoginAttempts } from '../u
 import { config } from '../config/index.js';
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import logger from '../utils/logger.js';
 
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
   setCookie(c, 'refreshToken', token, {
@@ -74,8 +75,9 @@ router.post('/register/admin', async (c) => {
     const admin = await UserService.create({ type: 'company', phone, name, email, companyPhone, passwordHash: null });
     const setupToken = await UserService.generateSetupToken(admin.id);
     if (email) {
-      const { sendInviteEmail } = await import('../utils/email.js');
-      await sendInviteEmail({ to: email, name, role: 'company', token: setupToken });
+      void import('../utils/email.js').then(({ sendInviteEmail }) =>
+        sendInviteEmail({ to: email, name, role: 'company', token: setupToken })
+      ).catch((err) => logger.warn(`[authController] Failed to send invite email to ${email}: ${err}`));
     }
     return c.json({ user: admin, setupToken }, 201);
   } catch (err) {

@@ -160,14 +160,16 @@ export const technicianSpecialtySchema = z.object({
 });
 
 // User creation/update validation (super_admin only)
-export const userSchema = z.object({
+const userBaseSchema = z.object({
   phone: phoneField,
   name: z.string().min(2).max(100),
   email: z.string().email().optional(),
   password: passwordField,
   type: z.enum(['super_admin', 'company', 'technician']),
   companyPhone: phoneField.optional(),
-}).superRefine((data, ctx) => {
+});
+
+export const userSchema = userBaseSchema.superRefine((data, ctx) => {
   if (data.type === undefined) return;
   if (data.type !== 'super_admin' && !data.companyPhone) {
     ctx.addIssue({
@@ -177,3 +179,5 @@ export const userSchema = z.object({
     });
   }
 });
+
+export const userUpdateSchema = userBaseSchema.partial();

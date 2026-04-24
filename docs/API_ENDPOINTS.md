@@ -356,7 +356,6 @@ Incluye objetos `customer`, `technician`, `service` anidados.
   "startTime": "10:00",
   "status": "pending",
   "description": "Revisión de frenos",
-  "content": "Notas adicionales",
   "coordinates": { "lat": 9.9281, "lng": -84.0907 }
 }
 ```
@@ -369,29 +368,46 @@ Incluye objetos `customer`, `technician`, `service` anidados.
 | `appointmentDate` | string (`YYYY-MM-DD`) | No |
 | `startTime` | string (`HH:MM`) | No |
 | `status` | string | No (default: `pending`) |
-| `description` | string (máx 2000) | No |
-| `content` | string (máx 2000) | No |
+| `description` | string (máx 2000) | No — notas libres de la cita |
 | `coordinates` | `{ lat: number, lng: number }` | No |
+| `companyPhone` | string (10–15) | Solo `super_admin` — obligatorio |
 
-`companyPhone` siempre se toma del JWT (para `company`). `super_admin` debe incluirlo en el body.
+> **Nota sobre `companyPhone`:** Para rol `company` se toma automáticamente del JWT y no debe enviarse en el body. Para `super_admin` es obligatorio — sin él el servidor devuelve `400 companyPhone is required`.
+
+> **Nota sobre `content`:** Este campo **no debe enviarse en el body**. Es gestionado internamente por el backend para almacenar el link del evento de Google Calendar una vez que se sincroniza.
 
 `status` válidos: `pending` | `scheduled` | `confirmed` | `in_progress` | `completed` | `cancelled`
 
-Crea evento en Google Calendar automáticamente si hay fecha y hora.
-
 **Respuesta 201:** appointment
+
+#### Comportamiento automático tras la creación
+
+El backend ejecuta en background (no bloquea la respuesta):
+
+1. **Google Calendar** — Crea un evento con el título, descripción, fecha, hora y duración del servicio. El link del evento queda guardado en `appointment.content` y el ID del evento en `appointment.metadata.calendarEventId`.
+
+2. **Emails con ICS** — Envía un email de confirmación con el archivo `.ics` adjunto (para agregar al calendario) a:
+   - Cliente (`customer.email`)
+   - Técnico (`technician.email`)
+   - Empresa (`company.email`)
+
+   Requiere dominio verificado en Resend. En modo testing (dominio `onboarding@resend.dev`) solo entrega al email registrado en la cuenta de Resend.
 
 ---
 
 ### PUT `/appointments/:id` — Requiere `company` o `super_admin`
 
-Todos los campos opcionales. Actualiza el evento de Google Calendar.
+Todos los campos opcionales. `company` solo puede editar citas de su empresa.
+
+Actualiza el evento de Google Calendar automáticamente si cambia fecha, hora o descripción.
+
+> `content` y `metadata` no deben enviarse en el body — son campos internos del sync de Calendar.
 
 ---
 
 ### DELETE `/appointments/:id` — Requiere `company` o `super_admin`
 
-Elimina el evento de Google Calendar. **Respuesta 200:** `{ message: "Deleted" }`
+Elimina el evento de Google Calendar asociado (si existe). **Respuesta 200:** `{ message: "Deleted" }`
 
 ---
 

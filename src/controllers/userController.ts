@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { UserService } from '../services/userService.js';
 import { CompanyService } from '../services/companyService.js';
 import type { AppContext } from '../types.js';
-import { userSchema } from '../validation/schemas.js';
+import { userSchema, userUpdateSchema } from '../validation/schemas.js';
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 
@@ -78,7 +78,7 @@ router.put('/:id', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json(Errors.INVALID_JSON, 400);
 
-  const result = userSchema.partial().safeParse(body);
+  const result = userUpdateSchema.safeParse(body);
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
   }

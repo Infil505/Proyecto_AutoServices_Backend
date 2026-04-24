@@ -6,6 +6,9 @@ import { coverageZoneSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const ZONES_TTL = 30_000;
 
 const router = new Hono<AppContext>();
 
@@ -14,16 +17,31 @@ router.get('/', async (c) => {
   const { page, limit, offset } = parsePagination(c);
 
   if (payload.type === 'technician') {
+    const cacheKey = `zones:tech:${payload.phone}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const data = await TechnicianCoverageZoneService.getZonesByTechnician(payload.phone);
-    return c.json(createPaginatedResponse(data, data.length, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, data.length, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, ZONES_TTL);
+    return c.json(result);
   }
   if (payload.type === 'company') {
     const cp = payload.companyPhone ?? payload.phone;
+    const cacheKey = `zones:co:${cp}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([CoverageZoneService.getByCompany(cp, { limit, offset }), CoverageZoneService.countByCompany(cp)]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, ZONES_TTL);
+    return c.json(result);
   }
+  const cacheKey = `zones:admin:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
   const [data, total] = await Promise.all([CoverageZoneService.getAll({ limit, offset }), CoverageZoneService.countAll()]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, result, ZONES_TTL);
+  return c.json(result);
 });
 
 router.get('/:id', async (c) => {
@@ -61,7 +79,9 @@ router.post('/', async (c) => {
     : result.data.companyPhone;
   if (!companyPhone) return c.json({ error: 'companyPhone is required' }, 400);
 
-  return c.json(await CoverageZoneService.create({ ...result.data, companyPhone }), 201);
+  const zone = await CoverageZoneService.create({ ...result.data, companyPhone });
+  cacheDeletePrefix('zones:');
+  return c.json(zone, 201);
 });
 
 router.put('/:id', async (c) => {
@@ -87,6 +107,7 @@ router.put('/:id', async (c) => {
   const dataToUpdate = payload.type === 'company' ? updateWithoutCompanyPhone : result.data;
   const updated = await CoverageZoneService.update(id, dataToUpdate);
   if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  cacheDeletePrefix('zones:');
   return c.json(updated);
 });
 
@@ -102,6 +123,7 @@ router.delete('/:id', async (c) => {
   }
 
   await CoverageZoneService.delete(id);
+  cacheDeletePrefix('zones:');
   return c.json({ message: 'Deleted' });
 });
 

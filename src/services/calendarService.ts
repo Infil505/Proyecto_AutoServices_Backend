@@ -35,17 +35,18 @@ function addMinutes(time: string, minutes: number): string {
 
 function buildEventBody(input: CalendarEventInput) {
   const tz = config.googleCalendarTimeZone;
-  const endTime = addMinutes(input.startTime, input.durationMinutes);
+  // Normalize to HH:MM — DB returns HH:MM:SS but RFC3339 expects HH:MM:SS (not HH:MM:SS:00)
+  const startHHMM = input.startTime.slice(0, 5);
+  const endTime = addMinutes(startHHMM, input.durationMinutes);
   const body: Record<string, unknown> = {
     summary: input.title,
     description: input.description,
-    start: { dateTime: `${input.date}T${input.startTime}:00`, timeZone: tz },
+    start: { dateTime: `${input.date}T${startHHMM}:00`, timeZone: tz },
     end:   { dateTime: `${input.date}T${endTime}:00`, timeZone: tz },
   };
   if (input.location) body.location = input.location;
-  if (input.attendeeEmails?.length) {
-    body.attendees = input.attendeeEmails.map(email => ({ email }));
-  }
+  // Attendees require Domain-Wide Delegation (Google Workspace only).
+  // Personal Gmail service accounts cannot invite attendees — omit to avoid 403.
   return body;
 }
 
@@ -58,7 +59,7 @@ export class CalendarService {
       const res = await cal.events.insert({
         calendarId: config.googleCalendarId,
         requestBody: buildEventBody(input),
-        sendUpdates: 'all',
+        sendUpdates: 'none',
       });
       const { id, htmlLink } = res.data;
       if (!id || !htmlLink) return null;
@@ -78,7 +79,7 @@ export class CalendarService {
         calendarId: config.googleCalendarId,
         eventId,
         requestBody: buildEventBody(input),
-        sendUpdates: 'all',
+        sendUpdates: 'none',
       });
       const { id, htmlLink } = res.data;
       if (!id || !htmlLink) return null;

@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { companies, users } from '../db/schema.js';
 import { UserService } from './userService.js';
 import { sendInviteEmail } from '../utils/email.js';
+import logger from '../utils/logger.js';
 
 type Page = { limit: number; offset: number };
 
@@ -47,7 +48,8 @@ export class CompanyService {
     const setupToken = await UserService.generateSetupToken(adminId);
 
     if (data.admin.email) {
-      await sendInviteEmail({ to: data.admin.email, name: data.admin.name, role: 'company', token: setupToken });
+      void sendInviteEmail({ to: data.admin.email, name: data.admin.name, role: 'company', token: setupToken })
+        .catch((err) => logger.warn(`[CompanyService.register] Failed to send invite email to ${data.admin.email}: ${err}`));
     }
 
     return { company, setupToken };

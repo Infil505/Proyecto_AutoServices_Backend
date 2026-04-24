@@ -4,6 +4,9 @@ import type { AppContext } from '../types.js';
 import { customerSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const CUSTOMERS_TTL = 30_000;
 
 const router = new Hono<AppContext>();
 
@@ -12,11 +15,17 @@ router.get('/', async (c) => {
   if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
 
   const { page, limit, offset } = parsePagination(c);
+  const cacheKey = `customers:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
+
   const [data, total] = await Promise.all([
     CustomerService.getAll({ limit, offset }),
     CustomerService.countAll(),
   ]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, result, CUSTOMERS_TTL);
+  return c.json(result);
 });
 
 router.get('/:phone', async (c) => {
@@ -39,7 +48,9 @@ router.post('/', async (c) => {
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
   }
-  return c.json(await CustomerService.create(result.data), 201);
+  const customer = await CustomerService.create(result.data);
+  cacheDeletePrefix('customers:');
+  return c.json(customer, 201);
 });
 
 router.put('/:phone', async (c) => {
@@ -56,6 +67,7 @@ router.put('/:phone', async (c) => {
   }
   const updated = await CustomerService.update(phone, result.data);
   if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  cacheDeletePrefix('customers:');
   return c.json(updated);
 });
 
@@ -66,6 +78,7 @@ router.delete('/:phone', async (c) => {
     return c.json(Errors.CUSTOMER_DELETE_ONLY, 403);
   }
   await CustomerService.delete(phone);
+  cacheDeletePrefix('customers:');
   return c.json({ message: 'Deleted' });
 });
 

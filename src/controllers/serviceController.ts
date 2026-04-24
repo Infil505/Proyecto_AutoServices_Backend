@@ -5,6 +5,9 @@ import { serviceSchema } from '../validation/schemas.js';
 import { parsePagination, createPaginatedResponse } from '../utils/pagination.js';
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
+import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+
+const SERVICES_TTL = 30_000;
 
 const router = new Hono<AppContext>();
 
@@ -15,16 +18,31 @@ router.get('/', async (c) => {
   if (payload.type === 'technician') {
     const cp = payload.companyPhone;
     if (!cp) return c.json(createPaginatedResponse([], 0, { page, limit, offset, sortOrder: 'desc' }));
+    const cacheKey = `services:co:${cp}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([ServiceService.getByCompany(cp, { limit, offset }), ServiceService.countByCompany(cp)]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, SERVICES_TTL);
+    return c.json(result);
   }
   if (payload.type === 'company') {
     const cp = payload.companyPhone ?? payload.phone;
+    const cacheKey = `services:co:${cp}:${page}:${limit}`;
+    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+    if (cached) return c.json(cached);
     const [data, total] = await Promise.all([ServiceService.getByCompany(cp, { limit, offset }), ServiceService.countByCompany(cp)]);
-    return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+    const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+    cacheSet(cacheKey, result, SERVICES_TTL);
+    return c.json(result);
   }
+  const cacheKey = `services:admin:${page}:${limit}`;
+  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+  if (cached) return c.json(cached);
   const [data, total] = await Promise.all([ServiceService.getAll({ limit, offset }), ServiceService.countAll()]);
-  return c.json(createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' }));
+  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+  cacheSet(cacheKey, result, SERVICES_TTL);
+  return c.json(result);
 });
 
 router.get('/:id', async (c) => {
@@ -59,7 +77,9 @@ router.post('/', async (c) => {
     : result.data.companyPhone;
   if (!companyPhone) return c.json({ error: 'companyPhone is required' }, 400);
 
-  return c.json(await ServiceService.create({ ...result.data, companyPhone }), 201);
+  const service = await ServiceService.create({ ...result.data, companyPhone });
+  cacheDeletePrefix('services:');
+  return c.json(service, 201);
 });
 
 router.put('/:id', async (c) => {
@@ -86,6 +106,7 @@ router.put('/:id', async (c) => {
   const dataToUpdate = payload.type === 'super_admin' ? result.data : updateWithoutCompanyPhone;
   const updated = await ServiceService.update(id, dataToUpdate);
   if (!updated) return c.json(Errors.NOT_FOUND, 404);
+  cacheDeletePrefix('services:');
   return c.json(updated);
 });
 
@@ -101,6 +122,7 @@ router.delete('/:id', async (c) => {
   }
 
   await ServiceService.delete(id);
+  cacheDeletePrefix('services:');
   return c.json({ message: 'Deleted' });
 });
 

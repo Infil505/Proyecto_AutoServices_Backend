@@ -7,6 +7,7 @@ import { parsePagination, createPaginatedResponse } from '../utils/pagination.js
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+import logger from '../utils/logger.js';
 
 const COMPANIES_LIST_TTL_MS = 30_000;
 
@@ -134,8 +135,9 @@ router.post('/:phone/admin', async (c) => {
     const user = await UserService.create({ type: 'company', phone, name, email, companyPhone, passwordHash: null });
     const setupToken = await UserService.generateSetupToken(user.id);
     if (email) {
-      const { sendInviteEmail } = await import('../utils/email.js');
-      await sendInviteEmail({ to: email, name, role: 'company', token: setupToken });
+      void import('../utils/email.js').then(({ sendInviteEmail }) =>
+        sendInviteEmail({ to: email, name, role: 'company', token: setupToken })
+      ).catch((err) => logger.warn(`[companyController] Failed to send invite email to ${email}: ${err}`));
     }
     return c.json({ user, setupToken }, 201);
   } catch (err) {
