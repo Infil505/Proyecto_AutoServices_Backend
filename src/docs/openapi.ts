@@ -39,14 +39,15 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'AutoServices API',
-    version: '1.4.0',
+    version: '1.5.0',
     description:
       'REST API for the AutoServices appointment and service management system.\n\n' +
-      '**Authentication:** All endpoints except `/auth/register/company`, `/auth/login`, `/auth/refresh`, `/public/*` and `/health` require a `Bearer <access_token>` JWT.\n\n' +
+      '**Authentication:** All endpoints except `/auth/register/company`, `/auth/login`, `/auth/refresh`, `/auth/setup-password`, `/public/*` and `/health` require a `Bearer <access_token>` JWT.\n\n' +
       '**Token lifecycle:**\n' +
-      '- `POST /auth/login` → returns `token` (access) + `refreshToken`\n' +
-      '- `POST /auth/refresh` → exchange a refresh token for a new access token\n' +
+      '- `POST /auth/login` → returns `token` (access) + sets `refreshToken` in an httpOnly cookie\n' +
+      '- `POST /auth/refresh` → sends the httpOnly `refreshToken` cookie automatically; returns a new access token\n' +
       '- `POST /auth/logout` → revokes both tokens (persisted in DB — survives restarts)\n\n' +
+      '**Invite flow:** Technicians and company admins are created without a password. They receive an email with a one-time token and must call `POST /auth/setup-password` to activate their account.\n\n' +
       '**Login lockout:** 5 consecutive failed attempts for the same phone number → 15-minute lockout.\n\n' +
       '**Roles:** `super_admin` · `company` · `technician`\n\n' +
       '**IDOR protection:** Company users can only modify resources that belong to their company.',
@@ -201,7 +202,7 @@ export const openApiSpec = {
         type: 'object',
         properties: {
           technicianPhone: { type: 'string', example: '+1122334455' },
-          coverageZoneId: { type: 'integer' },
+          zoneId: { type: 'integer' },
         },
       },
       PaginatedResponse: {
@@ -229,29 +230,43 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Register company',
-        description: 'Creates a company record and its admin user in a single transaction. **Public.**',
+        description: 'Creates a company and its first admin user in a single transaction. The admin receives an invite email with a one-time `setupToken` to set their password. **Public.**',
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['phone', 'name', 'password'],
+                required: ['company', 'admin'],
                 properties: {
-                  phone: { type: 'string', example: '+1234567890' },
-                  name: { type: 'string', example: 'AutoServices Pro' },
-                  email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 8 },
-                  address: { type: 'string' },
-                  startHour: { type: 'string', example: '08:00' },
-                  endHour: { type: 'string', example: '18:00' },
+                  company: {
+                    type: 'object',
+                    required: ['phone', 'name'],
+                    properties: {
+                      phone: { type: 'string', example: '+1234567890' },
+                      name: { type: 'string', example: 'AutoServices Pro' },
+                      email: { type: 'string', format: 'email' },
+                      address: { type: 'string' },
+                      startHour: { type: 'string', example: '08:00' },
+                      endHour: { type: 'string', example: '18:00' },
+                    },
+                  },
+                  admin: {
+                    type: 'object',
+                    required: ['phone', 'name'],
+                    properties: {
+                      phone: { type: 'string', example: '+1555000001', description: "Admin's personal phone (used for login)" },
+                      name: { type: 'string' },
+                      email: { type: 'string', format: 'email' },
+                    },
+                  },
                 },
               },
             },
           },
         },
         responses: {
-          ...r201({ type: 'object', properties: { company: { $ref: '#/components/schemas/Company' }, setupToken: { type: 'string', description: 'One-time token for the admin to set their password via POST /auth/setup' } } }),
+          ...r201({ type: 'object', properties: { company: { $ref: '#/components/schemas/Company' }, setupToken: { type: 'string', description: 'One-time token for the admin to activate their account via POST /auth/setup-password' } } }),
           ...r400,
           ...r409,
         },
@@ -261,7 +276,7 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Create super_admin',
-        description: 'Creates a new super_admin user. **Requires super_admin JWT.**',
+        description: 'Creates a new `super_admin` user via the invite flow. The new admin receives an email with a `setupToken` to set their password. **Requires super_admin JWT.**',
         security: bearerAuth,
         requestBody: {
           required: true,
@@ -269,19 +284,18 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['phone', 'name', 'password'],
+                required: ['phone', 'name'],
                 properties: {
                   phone: { type: 'string', example: '+1555000000' },
                   name: { type: 'string' },
                   email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 8 },
                 },
               },
             },
           },
         },
         responses: {
-          ...r201({ type: 'object', properties: { user: { $ref: '#/components/schemas/User' } } }),
+          ...r201({ type: 'object', properties: { user: { $ref: '#/components/schemas/User' }, setupToken: { type: 'string', description: 'One-time token for the new admin to activate their account via POST /auth/setup-password' } } }),
           ...r400,
           ...r401,
           ...r403,
@@ -318,28 +332,40 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Refresh access token',
-        description: 'Exchanges a valid refresh token for a new short-lived access token. **Public.**',
+        description: 'Issues a new short-lived access token using the `refreshToken` httpOnly cookie set during login. No request body required — the browser sends the cookie automatically. **Public.**',
+        responses: {
+          ...r200({
+            type: 'object',
+            properties: { token: { type: 'string', description: 'New access JWT' } },
+          }),
+          401: { description: 'Invalid or expired refresh token cookie', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api/v1/auth/setup-password': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Set password (invite flow)',
+        description: 'Activates a new account by setting a password using the one-time `setupToken` received via email. Valid for technicians and company admins created via the invite flow. **Public.**',
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['refreshToken'],
+                required: ['token', 'password'],
                 properties: {
-                  refreshToken: { type: 'string', description: 'The refresh JWT returned at login' },
+                  token: { type: 'string', description: 'One-time setup token from the invite email' },
+                  password: { type: 'string', minLength: 8 },
                 },
               },
             },
           },
         },
         responses: {
-          ...r200({
-            type: 'object',
-            properties: { token: { type: 'string', description: 'New access JWT' } },
-          }),
+          ...r200({ $ref: '#/components/schemas/MessageResponse' }),
           ...r400,
-          401: { description: 'Invalid or expired refresh token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          401: { description: 'Invalid or expired setup token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -609,7 +635,7 @@ export const openApiSpec = {
       post: {
         tags: ['Companies'],
         summary: 'Create company admin',
-        description: 'Creates an additional admin user for an existing company. The new user has `type: company` and is linked to the company via `companyPhone`. **Only `super_admin`.**',
+        description: 'Creates an additional admin user for an existing company via the invite flow. The new user has `type: company` and is linked to the company via `companyPhone`. They receive an email with a `setupToken` to set their password. **Only `super_admin`.**',
         security: bearerAuth,
         parameters: [phoneParam('phone')],
         requestBody: {
@@ -618,19 +644,18 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['phone', 'name', 'password'],
+                required: ['phone', 'name'],
                 properties: {
                   phone: { type: 'string', example: '+1555111222', description: "Admin's personal phone (used for login)" },
                   name: { type: 'string' },
                   email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 8 },
                 },
               },
             },
           },
         },
         responses: {
-          ...r201({ type: 'object', properties: { user: { $ref: '#/components/schemas/User' } } }),
+          ...r201({ type: 'object', properties: { user: { $ref: '#/components/schemas/User' }, setupToken: { type: 'string', description: 'One-time token for the admin to activate their account via POST /auth/setup-password' } } }),
           ...r400,
           ...r401,
           ...r403,
@@ -1149,6 +1174,17 @@ export const openApiSpec = {
         },
         responses: { ...r201({ $ref: '#/components/schemas/ServiceSpecialty' }), ...r400, ...protectedResponses },
       },
+      delete: {
+        tags: ['Service Specialties'],
+        summary: 'Unlink service from specialty',
+        description: 'Removes the link by query parameters. Only `company` and `super_admin`.',
+        security: bearerAuth,
+        parameters: [
+          { name: 'serviceId', in: 'query' as const, required: true, schema: { type: 'integer' } },
+          { name: 'specialtyId', in: 'query' as const, required: true, schema: { type: 'integer' } },
+        ],
+        responses: { ...r204, ...protectedResponses, ...r404 },
+      },
     },
     '/api/v1/service-specialties/service/{serviceId}': {
       get: {
@@ -1166,15 +1202,6 @@ export const openApiSpec = {
         security: bearerAuth,
         parameters: [idParam('specialtyId')],
         responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/ServiceSpecialty' } }), ...protectedResponses },
-      },
-    },
-    '/api/v1/service-specialties/{serviceId}/{specialtyId}': {
-      delete: {
-        tags: ['Service Specialties'],
-        summary: 'Unlink service from specialty',
-        security: bearerAuth,
-        parameters: [idParam('serviceId'), idParam('specialtyId')],
-        responses: { ...r204, ...protectedResponses, ...r404 },
       },
     },
 
@@ -1218,6 +1245,17 @@ export const openApiSpec = {
         },
         responses: { ...r201({ $ref: '#/components/schemas/TechnicianSpecialty' }), ...r400, ...protectedResponses },
       },
+      delete: {
+        tags: ['Technician Specialties'],
+        summary: 'Unlink technician from specialty',
+        description: 'Removes the link by query parameters. Only `company` and `super_admin`.',
+        security: bearerAuth,
+        parameters: [
+          { name: 'technicianPhone', in: 'query' as const, required: true, schema: { type: 'string', example: '+1122334455' } },
+          { name: 'specialtyId', in: 'query' as const, required: true, schema: { type: 'integer' } },
+        ],
+        responses: { ...r204, ...protectedResponses, ...r404 },
+      },
     },
     '/api/v1/technician-specialties/technician/{technicianPhone}': {
       get: {
@@ -1238,24 +1276,24 @@ export const openApiSpec = {
         responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/TechnicianSpecialty' } }), ...protectedResponses },
       },
     },
-    '/api/v1/technician-specialties/{technicianPhone}/{specialtyId}': {
-      delete: {
-        tags: ['Technician Specialties'],
-        summary: 'Unlink technician from specialty',
-        security: bearerAuth,
-        parameters: [phoneParam('technicianPhone'), idParam('specialtyId')],
-        responses: { ...r204, ...protectedResponses, ...r404 },
-      },
-    },
 
     // ─── USERS ─────────────────────────────────────────────────────────────────
     '/api/v1/users': {
       get: {
         tags: ['Users'],
         summary: 'List users',
-        description: 'Only `super_admin`. Returns a plain array (no pagination).',
+        description: 'Only `super_admin`. Returns a paginated response.',
         security: bearerAuth,
-        responses: { ...r200({ type: 'array', items: { $ref: '#/components/schemas/User' } }), ...protectedResponses },
+        parameters: paginationParams,
+        responses: {
+          ...r200({
+            allOf: [
+              { $ref: '#/components/schemas/PaginatedResponse' },
+              { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/User' } } } },
+            ],
+          }),
+          ...protectedResponses,
+        },
       },
       post: {
         tags: ['Users'],
@@ -1389,16 +1427,27 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['technicianPhone', 'coverageZoneId'],
+                required: ['technicianPhone', 'zoneId'],
                 properties: {
                   technicianPhone: { type: 'string', example: '+1122334455' },
-                  coverageZoneId: { type: 'integer' },
+                  zoneId: { type: 'integer' },
                 },
               },
             },
           },
         },
         responses: { ...r201({ $ref: '#/components/schemas/TechnicianCoverageZone' }), ...r400, ...protectedResponses },
+      },
+      delete: {
+        tags: ['Technician Coverage Zones'],
+        summary: 'Remove technician from a coverage zone',
+        description: 'Removes the assignment by query parameters. Only `company` and `super_admin`.',
+        security: bearerAuth,
+        parameters: [
+          { name: 'technicianPhone', in: 'query' as const, required: true, schema: { type: 'string', example: '+1122334455' } },
+          { name: 'zoneId', in: 'query' as const, required: true, schema: { type: 'integer' } },
+        ],
+        responses: { ...r204, ...protectedResponses, ...r404 },
       },
     },
     '/api/v1/technician-coverage-zones/technician/{phone}': {
@@ -1439,16 +1488,6 @@ export const openApiSpec = {
         },
       },
     },
-    '/api/v1/technician-coverage-zones/{technicianPhone}/{zoneId}': {
-      delete: {
-        tags: ['Technician Coverage Zones'],
-        summary: 'Remove technician from a coverage zone',
-        security: bearerAuth,
-        parameters: [phoneParam('technicianPhone'), idParam('zoneId')],
-        responses: { ...r204, ...protectedResponses, ...r404 },
-      },
-    },
-
     // ─── STATS ─────────────────────────────────────────────────────────────────
     '/api/v1/stats': {
       get: {

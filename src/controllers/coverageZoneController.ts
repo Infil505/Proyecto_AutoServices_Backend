@@ -7,6 +7,7 @@ import { parsePagination, createPaginatedResponse } from '../utils/pagination.js
 import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+import logger from '../utils/logger.js';
 
 const ZONES_TTL = 30_000;
 
@@ -16,32 +17,37 @@ router.get('/', async (c) => {
   const payload = c.var.user!;
   const { page, limit, offset } = parsePagination(c);
 
-  if (payload.type === 'technician') {
-    const cacheKey = `zones:tech:${payload.phone}`;
+  try {
+    if (payload.type === 'technician') {
+      const cacheKey = `zones:tech:${payload.phone}`;
+      const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+      if (cached) return c.json(cached);
+      const data = await TechnicianCoverageZoneService.getZonesByTechnician(payload.phone);
+      const result = createPaginatedResponse(data, data.length, { page, limit, offset, sortOrder: 'desc' });
+      cacheSet(cacheKey, result, ZONES_TTL);
+      return c.json(result);
+    }
+    if (payload.type === 'company') {
+      const cp = payload.companyPhone ?? payload.phone;
+      const cacheKey = `zones:co:${cp}:${page}:${limit}`;
+      const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
+      if (cached) return c.json(cached);
+      const [data, total] = await Promise.all([CoverageZoneService.getByCompany(cp, { limit, offset }), CoverageZoneService.countByCompany(cp)]);
+      const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
+      cacheSet(cacheKey, result, ZONES_TTL);
+      return c.json(result);
+    }
+    const cacheKey = `zones:admin:${page}:${limit}`;
     const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
     if (cached) return c.json(cached);
-    const data = await TechnicianCoverageZoneService.getZonesByTechnician(payload.phone);
-    const result = createPaginatedResponse(data, data.length, { page, limit, offset, sortOrder: 'desc' });
-    cacheSet(cacheKey, result, ZONES_TTL);
-    return c.json(result);
-  }
-  if (payload.type === 'company') {
-    const cp = payload.companyPhone ?? payload.phone;
-    const cacheKey = `zones:co:${cp}:${page}:${limit}`;
-    const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
-    if (cached) return c.json(cached);
-    const [data, total] = await Promise.all([CoverageZoneService.getByCompany(cp, { limit, offset }), CoverageZoneService.countByCompany(cp)]);
+    const [data, total] = await Promise.all([CoverageZoneService.getAll({ limit, offset }), CoverageZoneService.countAll()]);
     const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
     cacheSet(cacheKey, result, ZONES_TTL);
     return c.json(result);
+  } catch (err) {
+    logger.error(`GET /coverage-zones failed for ${payload.type} ${payload.phone}: ${String(err)}`);
+    return c.json({ error: 'Error al obtener zonas de cobertura' }, 500);
   }
-  const cacheKey = `zones:admin:${page}:${limit}`;
-  const cached = cacheGet<ReturnType<typeof createPaginatedResponse>>(cacheKey);
-  if (cached) return c.json(cached);
-  const [data, total] = await Promise.all([CoverageZoneService.getAll({ limit, offset }), CoverageZoneService.countAll()]);
-  const result = createPaginatedResponse(data, total, { page, limit, offset, sortOrder: 'desc' });
-  cacheSet(cacheKey, result, ZONES_TTL);
-  return c.json(result);
 });
 
 router.get('/:id', async (c) => {

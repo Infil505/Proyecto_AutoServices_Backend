@@ -7,6 +7,7 @@ import { parsePagination, createPaginatedResponse } from '../utils/pagination.js
 import { handleDbError } from '../utils/dbErrors.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
+import logger from '../utils/logger.js';
 
 const TECHNICIANS_LIST_TTL = 30_000;
 
@@ -126,6 +127,7 @@ router.post('/', async (c) => {
     return c.json({ technician, setupToken }, 201);
   } catch (err) {
     const mapped = handleDbError(err);
+    logger.error(`POST /technicians register failed for ${result.data.phone} (company ${companyPhone}): ${String(err)}`);
     return c.json({ error: mapped.error }, mapped.status as any);
   }
 });

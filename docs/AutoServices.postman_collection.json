@@ -47,11 +47,15 @@
     { "key": "newCompanyPhone",    "value": "", "type": "string" },
     { "key": "newTechPhone",       "value": "", "type": "string" },
     { "key": "newCustomerPhone",   "value": "", "type": "string" },
-    { "key": "dynCompanyPhone",    "value": "", "type": "string" },
-    { "key": "dynAdminPhone",      "value": "", "type": "string" },
-    { "key": "dynTechPhone",       "value": "", "type": "string" },
-    { "key": "dynCustomerPhone",   "value": "", "type": "string" },
-    { "key": "dynSpecialtyName",   "value": "", "type": "string" }
+    { "key": "dynCompanyPhone",       "value": "", "type": "string" },
+    { "key": "dynSuperCompanyPhone",  "value": "", "type": "string" },
+    { "key": "dynAdminPhone",         "value": "", "type": "string" },
+    { "key": "dynTechPhone",          "value": "", "type": "string" },
+    { "key": "dynCustomerPhone",      "value": "", "type": "string" },
+    { "key": "dynUserPhone",          "value": "", "type": "string" },
+    { "key": "dynRegisterAdminPhone", "value": "", "type": "string" },
+    { "key": "dynCompanyAdminPhone",  "value": "", "type": "string" },
+    { "key": "dynSpecialtyName",      "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -1142,7 +1146,7 @@
             "url": { "raw": "{{baseUrl}}/technician-coverage-zones", "host": ["{{baseUrl}}"], "path": ["technician-coverage-zones"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"technicianPhone\": \"{{technicianPhone}}\",\n  \"coverageZoneId\": {{coverageZoneId}}\n}",
+              "raw": "{\n  \"technicianPhone\": \"{{technicianPhone}}\",\n  \"zoneId\": {{coverageZoneId}}\n}",
               "options": { "raw": { "language": "json" } }
             }
           },
@@ -1179,7 +1183,12 @@
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('Status 200', () => pm.response.to.have.status(200));",
-            "pm.test('Es array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+            "pm.test('Paginado', () => {",
+            "  const r = pm.response.json();",
+            "  pm.expect(r).to.have.property('data');",
+            "  pm.expect(r.data).to.be.an('array');",
+            "  pm.expect(r).to.have.property('pagination');",
+            "});"
           ]}}]
         },
         {
@@ -1478,7 +1487,8 @@
             "pm.test('Status 400 validación Zod', () => pm.response.to.have.status(400));",
             "pm.test('Contiene errores de validación', () => {",
             "  const r = pm.response.json();",
-            "  pm.expect(r).to.have.property('errors');",
+            "  pm.expect(r).to.have.property('error');",
+            "  pm.expect(r).to.have.property('details');",
             "});"
           ]}}]
         }
