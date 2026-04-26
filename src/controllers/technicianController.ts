@@ -9,7 +9,7 @@ import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 import logger from '../utils/logger.js';
 
-const TECHNICIANS_LIST_TTL = 30_000;
+const TECHNICIANS_LIST_TTL = 60_000;
 
 function invalidateTechniciansCache(companyPhone?: string): void {
   if (companyPhone) {

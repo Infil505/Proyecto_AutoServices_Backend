@@ -7,7 +7,7 @@ import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 
 const router = new Hono<AppContext>();
 
-const STATS_TTL_MS = 30_000; // 30 seconds
+const STATS_TTL_MS = 60_000; // 60s — appointment events already invalidate this via EventEmitter
 
 /** Invalidate all stats caches (call after any appointment/technician/service mutation). */
 export function invalidateStatsCache() {

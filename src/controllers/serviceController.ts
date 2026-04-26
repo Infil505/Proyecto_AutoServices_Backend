@@ -7,7 +7,7 @@ import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 
-const SERVICES_TTL = 30_000;
+const SERVICES_TTL = 60_000;
 
 const router = new Hono<AppContext>();
 

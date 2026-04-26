@@ -11,7 +11,7 @@ import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 import logger from '../utils/logger.js';
 
-const APPOINTMENTS_LIST_TTL = 5_000; // 5s — short TTL; WS keeps frontend fresh on mutations
+const APPOINTMENTS_LIST_TTL = 60_000; // 60s — WS invalidates cache on mutations, so 5s was unnecessary churn
 
 function safeMeta(raw: unknown): Record<string, unknown> {
   return typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};

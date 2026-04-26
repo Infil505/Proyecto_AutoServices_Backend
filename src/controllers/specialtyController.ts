@@ -7,7 +7,7 @@ import { parseIntParam } from '../utils/params.js';
 import { Errors, validationErrorBody } from '../utils/errors.js';
 import { cacheGet, cacheSet, cacheDeletePrefix } from '../utils/cache.js';
 
-const SPECIALTIES_TTL = 30_000;
+const SPECIALTIES_TTL = 120_000; // 2m — specialties are catalog data, very rarely mutated
 
 const router = new Hono<AppContext>();
 
