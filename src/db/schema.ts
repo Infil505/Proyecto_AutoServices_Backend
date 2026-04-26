@@ -142,3 +142,16 @@ export const sessions = pgTable('sessions', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
+
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  userPhone: text('user_phone').notNull(),
+  userType: text('user_type').notNull(),
+  companyPhone: text('company_phone'),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (t) => ({
+  userPhoneIdx: index('idx_push_subscriptions_user_phone').on(t.userPhone),
+}));

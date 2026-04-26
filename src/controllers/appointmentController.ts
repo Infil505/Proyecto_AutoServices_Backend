@@ -21,6 +21,7 @@ async function syncCalendarAsync(
   appointmentId: number,
   appointment: { appointmentDate: string | null; startTime: string | null; metadata: unknown },
   mode: 'create' | 'update',
+  prevTechnicianPhone?: string | null,
 ): Promise<void> {
   if (!appointment.appointmentDate || !appointment.startTime) return;
   const full = await AppointmentService.getFullById(appointmentId);
@@ -41,12 +42,22 @@ async function syncCalendarAsync(
     calendarLink = calResult.htmlLink;
   }
 
-  // Send invitation emails to customer, technician and company on new appointments
   if (mode === 'create') {
     try {
       await EmailService.sendAppointmentCreatedEmails(full, calendarLink);
     } catch (err) {
       logger.warn(`[syncCalendarAsync] Email notifications failed for appointment ${appointmentId}: ${err}`);
+    }
+  } else {
+    // Send email to technician only when newly assigned or reassigned
+    const newTechPhone = full.appointment.technicianPhone;
+    const techChanged = !!newTechPhone && newTechPhone !== (prevTechnicianPhone ?? null);
+    if (techChanged && full.technician?.email) {
+      try {
+        await EmailService.sendTechnicianAssignedEmail(full, calendarLink);
+      } catch (err) {
+        logger.warn(`[syncCalendarAsync] Tech assignment email failed for appointment ${appointmentId}: ${err}`);
+      }
     }
   }
 }
@@ -192,12 +203,11 @@ router.put('/:id', async (c) => {
     return c.json(Errors.APPOINTMENT_UPDATE_ONLY, 403);
   }
 
-  let existing: Awaited<ReturnType<typeof AppointmentService.getById>> | undefined;
-  if (payload.type === 'company') {
-    existing = await AppointmentService.getById(id);
-    if (!existing) return c.json(Errors.NOT_FOUND, 404);
-    if (existing.companyPhone !== (payload.companyPhone ?? payload.phone))
-      return c.json(Errors.UNAUTHORIZED, 403);
+  const existing = await AppointmentService.getById(id);
+  if (!existing) return c.json(Errors.NOT_FOUND, 404);
+
+  if (payload.type === 'company' && existing.companyPhone !== (payload.companyPhone ?? payload.phone)) {
+    return c.json(Errors.UNAUTHORIZED, 403);
   }
 
   const body = await c.req.json().catch(() => null);
@@ -208,11 +218,11 @@ router.put('/:id', async (c) => {
     return c.json(validationErrorBody(result.error), 400);
   }
 
-  // Pass existing to avoid a second SELECT inside the service
-  const appointment = await AppointmentService.update(id, result.data, existing ?? undefined);
+  const prevTechPhone = existing.technicianPhone;
+  const appointment = await AppointmentService.update(id, result.data, existing);
   if (!appointment) return c.json(Errors.NOT_FOUND, 404);
   invalidateAppointmentsCache(appointment.companyPhone ?? undefined);
-  void syncCalendarAsync(appointment.id, appointment, 'update');
+  void syncCalendarAsync(appointment.id, appointment, 'update', prevTechPhone);
   return c.json(appointment);
 });
 

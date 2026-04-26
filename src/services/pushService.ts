@@ -1,4 +1,7 @@
 import webpush from 'web-push';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { pushSubscriptions } from '../db/schema.js';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -20,6 +23,7 @@ type AppointmentEvent = {
   [key: string]: unknown;
 };
 
+// Hot-path cache — populated from DB on startup and kept in sync on mutations.
 const subscriptions = new Map<string, SubscriptionRecord>();
 
 let initialized = false;
@@ -35,16 +39,63 @@ export class PushService {
     logger.info('Push notification service initialized');
   }
 
+  static async loadFromDb(): Promise<void> {
+    if (!initialized) return;
+    try {
+      const rows = await db.select().from(pushSubscriptions);
+      for (const row of rows) {
+        subscriptions.set(row.endpoint, {
+          subscription: { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+          userPhone: row.userPhone,
+          userType: row.userType,
+          companyPhone: row.companyPhone ?? undefined,
+        });
+      }
+      logger.info(`[PushService] Loaded ${rows.length} subscription(s) from DB`);
+    } catch (err) {
+      logger.error(`[PushService] Failed to load subscriptions from DB: ${err}`);
+    }
+  }
+
   static isEnabled() {
     return initialized;
   }
 
-  static saveSubscription(record: SubscriptionRecord) {
+  // Sync: Map updated immediately so broadcast works right away.
+  // DB write is fire-and-forget — if it fails the subscription works until restart.
+  static saveSubscription(record: SubscriptionRecord): void {
     subscriptions.set(record.subscription.endpoint, record);
+    db.insert(pushSubscriptions)
+      .values({
+        userPhone: record.userPhone,
+        userType: record.userType,
+        companyPhone: record.companyPhone ?? null,
+        endpoint: record.subscription.endpoint,
+        p256dh: record.subscription.keys.p256dh,
+        auth: record.subscription.keys.auth,
+      })
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        set: {
+          userPhone: record.userPhone,
+          userType: record.userType,
+          companyPhone: record.companyPhone ?? null,
+          p256dh: record.subscription.keys.p256dh,
+          auth: record.subscription.keys.auth,
+        },
+      })
+      .catch((err: unknown) =>
+        logger.warn(`[PushService] Failed to persist subscription for ${record.userPhone}: ${err}`)
+      );
   }
 
-  static removeSubscription(endpoint: string) {
+  static removeSubscription(endpoint: string): void {
     subscriptions.delete(endpoint);
+    db.delete(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, endpoint))
+      .catch((err: unknown) =>
+        logger.warn(`[PushService] Failed to remove subscription from DB: ${err}`)
+      );
   }
 
   static getSubscriptionCount() {
@@ -86,7 +137,7 @@ export class PushService {
           if (e.statusCode === 410 || e.statusCode === 404) {
             toRemove.push(endpoint);
           } else {
-            logger.warn(`Push failed for ${record.userPhone}: ${e.message}`);
+            logger.warn(`[PushService] Push failed for ${record.userPhone}: ${e.message}`);
           }
         })
       );
@@ -96,6 +147,11 @@ export class PushService {
 
     for (const endpoint of toRemove) {
       subscriptions.delete(endpoint);
+      db.delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.endpoint, endpoint))
+        .catch((err: unknown) =>
+          logger.warn(`[PushService] Failed to remove stale subscription from DB: ${err}`)
+        );
     }
   }
 

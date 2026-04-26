@@ -70,6 +70,7 @@ EmailService.startEmailListener();
 // Initialize Web Push notifications (requires VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY in .env)
 PushService.init();
 PushService.attachToEvents(AppointmentService.events);
+void PushService.loadFromDb();
 
 // Per-user rate limit: 300 req / 15 min per authenticated phone (production).
 // Development is relaxed because stress tests share 3 tokens across all VUs —

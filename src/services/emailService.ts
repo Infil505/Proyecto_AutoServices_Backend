@@ -201,6 +201,77 @@ export class EmailService {
     await Promise.allSettled(sends);
   }
 
+  static async sendTechnicianAssignedEmail(
+    full: NonNullable<Awaited<ReturnType<typeof AppointmentService.getFullById>>>,
+    calendarLink?: string,
+  ): Promise<void> {
+    const { appointment, technician, company, customer, service } = full;
+    if (!technician?.email || !config.resendApiKey) return;
+
+    const duration = service?.estimatedDurationMinutes ?? 60;
+    const coords = appointment.coordinates as { lat?: number; lng?: number } | null;
+    const location = coords?.lat && coords?.lng ? `${coords.lat},${coords.lng}` : undefined;
+
+    const icsBuffer = generateICS({
+      uid: `apt-${appointment.id}`,
+      title: `Cita #${appointment.id} — ${service?.name ?? 'Servicio'}`,
+      description: [
+        `Servicio: ${service?.name ?? 'N/A'}`,
+        `Cliente: ${customer?.name ?? 'N/A'} (${appointment.customerPhone ?? ''})`,
+        `Empresa: ${company?.name ?? 'N/A'}`,
+        ...(appointment.description ? [`Notas: ${appointment.description}`] : []),
+      ].join('\n'),
+      date: appointment.appointmentDate!,
+      startTime: appointment.startTime!,
+      durationMinutes: duration,
+      location,
+    });
+
+    const calendarSection = calendarLink
+      ? `<p><a href="${calendarLink}" style="color:#1a6fb5;">Ver evento en Google Calendar</a></p>`
+      : '';
+
+    const table = `
+      <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Fecha</td>
+            <td style="padding:8px;border:1px solid #ddd;">${appointment.appointmentDate ?? 'N/A'}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Hora</td>
+            <td style="padding:8px;border:1px solid #ddd;">${(appointment.startTime ?? 'N/A').slice(0, 5)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Servicio</td>
+            <td style="padding:8px;border:1px solid #ddd;">${service?.name ?? 'N/A'}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Cliente</td>
+            <td style="padding:8px;border:1px solid #ddd;">${customer?.name ?? 'N/A'}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Empresa</td>
+            <td style="padding:8px;border:1px solid #ddd;">${company?.name ?? 'N/A'}</td></tr>
+        ${appointment.description ? `<tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;">Notas</td>
+            <td style="padding:8px;border:1px solid #ddd;">${appointment.description}</td></tr>` : ''}
+      </table>`;
+
+    const { error } = await getResend().emails.send({
+      from: config.resendFromEmail,
+      to: technician.email,
+      subject: `Cita reasignada #${appointment.id} — AutoServices`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333;">
+        <h2 style="color:#1a6fb5;">Cita reasignada</h2>
+        <p>Hola <strong>${technician.name ?? 'técnico'}</strong>,</p>
+        <p>Se te ha asignado la cita <strong>#${appointment.id}</strong>. Adjunto el archivo para tu calendario.</p>
+        ${table}${calendarSection}
+        <p style="color:#888;font-size:12px;">AutoServices — Este correo fue generado automáticamente.</p>
+      </div>`,
+      attachments: [{
+        filename: `cita-${appointment.id}.ics`,
+        content: icsBuffer,
+        contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+      }],
+    });
+
+    if (error) {
+      logger.warn(`[EmailService] Error email reasignación técnico cita ${appointment.id}: ${error.message}`);
+    } else {
+      logger.info(`[EmailService] Email reasignación enviado a técnico ${technician.email}`);
+    }
+  }
+
   /**
    * Registra el listener sobre AppointmentService.events.
    * Llamar una sola vez desde index.ts al arrancar el servidor.
