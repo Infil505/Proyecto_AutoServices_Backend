@@ -102,6 +102,18 @@ export class PushService {
     return subscriptions.size;
   }
 
+  static hasSubscription(endpoint: string): boolean {
+    return subscriptions.has(endpoint);
+  }
+
+  static countByUser(phone: string): number {
+    let count = 0;
+    for (const record of subscriptions.values()) {
+      if (record.userPhone === phone) count++;
+    }
+    return count;
+  }
+
   static async broadcast(event: string, appointment: AppointmentEvent) {
     if (!initialized) return;
 

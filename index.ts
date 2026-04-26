@@ -265,8 +265,10 @@ app.post("/health/shutdown", async (c) => {
 // Metrics endpoint (internal — no JWT required)
 app.route("/", createMetricsApp());
 
-// API Documentation (Swagger UI + OpenAPI spec)
-app.route("/api/v1", docsRoutes);
+// API Documentation (Swagger UI + OpenAPI spec) — development only
+if (config.nodeEnv !== 'production') {
+  app.route("/api/v1", docsRoutes);
+}
 
 app.get("/", (c) =>
   c.text("AutoServices Backend API - REST API with JWT Authentication"),
@@ -291,7 +293,9 @@ const server = Bun.serve({
 });
 
 logger.info(`AutoServices REST API running on http://localhost:${config.port}`);
-logger.info(`API docs available at http://localhost:${config.port}/api/v1/docs`);
+if (config.nodeEnv !== 'production') {
+  logger.info(`API docs available at http://localhost:${config.port}/api/v1/docs`);
+}
 
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal: string) {

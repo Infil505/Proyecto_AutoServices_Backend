@@ -89,17 +89,19 @@ router.put('/:id', async (c) => {
 
   if (payload.type === 'technician') return c.json(Errors.UNAUTHORIZED, 403);
 
+  // Ownership check before body parsing — avoids leaking whether an ID exists
+  // to callers who don't own the resource (400 vs 403/404 timing oracle).
+  if (payload.type === 'company') {
+    const service = await ServiceService.getById(id);
+    if (!service || service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
+  }
+
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = serviceSchema.partial().safeParse(body);
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
-  }
-
-  if (payload.type === 'company') {
-    const service = await ServiceService.getById(id);
-    if (!service || service.companyPhone !== (payload.companyPhone ?? payload.phone)) return c.json(Errors.SERVICE_UPDATE_OWN, 403);
   }
 
   const { companyPhone: _stripped, ...updateWithoutCompanyPhone } = result.data;

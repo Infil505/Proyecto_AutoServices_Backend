@@ -107,11 +107,14 @@ router.post('/login', async (c) => {
   }
 
   const auth = await UserService.authenticate(phone, result.data.password);
-  if (auth === 'not_activated') {
-    return c.json(Errors.ACCOUNT_NOT_ACTIVATED, 403);
-  }
-  if (!auth) {
+  if (!auth || auth === 'not_activated') {
     recordFailedAttempt(phone);
+    // Log the specific reason server-side without exposing it to the caller.
+    // Returning a distinct error for 'not_activated' would reveal which phones
+    // are registered but pending invite setup (user enumeration oracle).
+    if (auth === 'not_activated') {
+      logger.warn(`[login] Not-activated account attempted login: ${phone}`);
+    }
     return c.json(Errors.INVALID_CREDENTIALS, 401);
   }
 

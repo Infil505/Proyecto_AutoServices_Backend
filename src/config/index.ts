@@ -65,9 +65,11 @@ const getConfig = (): Config => {
   if (nodeEnv !== 'test') {
     if (!databaseUrl) throw new Error('DATABASE_URL environment variable is required');
     if (!jwtSecret) throw new Error('JWT_SECRET environment variable is required');
+    if (jwtSecret.length < 32) throw new Error('JWT_SECRET must be at least 32 characters');
   }
 
   if (nodeEnv === 'production') {
+    if (jwtSecret.length < 64) throw new Error('JWT_SECRET must be at least 64 characters in production');
     if (!process.env.SHUTDOWN_PASSWORD)
       throw new Error('SHUTDOWN_PASSWORD environment variable must be set in production');
     if (!process.env.JWT_EXPIRES_IN)

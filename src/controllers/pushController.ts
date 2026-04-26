@@ -3,6 +3,8 @@ import { PushService } from '../services/pushService.js';
 import type { AppContext } from '../types.js';
 import { Errors } from '../utils/errors.js';
 
+const MAX_SUBSCRIPTIONS_PER_USER = 20;
+
 const router = new Hono<AppContext>();
 
 router.post('/', async (c) => {
@@ -23,6 +25,13 @@ router.post('/', async (c) => {
     !keys?.auth
   ) {
     return c.json({ error: 'Invalid push subscription object' }, 400);
+  }
+
+  // Allow re-registering an existing endpoint (browser refresh / key rotation).
+  // Only apply the cap to genuinely new endpoints.
+  const isUpdate = PushService.hasSubscription(body.endpoint);
+  if (!isUpdate && PushService.countByUser(user.phone as string) >= MAX_SUBSCRIPTIONS_PER_USER) {
+    return c.json({ error: 'Maximum push subscriptions per user reached' }, 429);
   }
 
   PushService.saveSubscription({
