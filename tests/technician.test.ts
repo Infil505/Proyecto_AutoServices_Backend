@@ -36,17 +36,13 @@ describe('POST /technicians — validation (company)', () => {
 
   it('missing name returns 400', async () => {
     const res = await client.api.v1.technicians.$post({
-      json: { phone: '+1122334455', password: 'secret123' },
+      json: { phone: '+1122334455' },
     });
     expect(res.status).toBe(400);
   });
 
-  it('password too short returns 400', async () => {
-    const res = await client.api.v1.technicians.$post({
-      json: { phone: '+1122334455', name: 'Tech A', password: '123' },
-    });
-    expect(res.status).toBe(400);
-  });
+  // Note: POST /technicians does NOT accept a password field — technicians receive
+  // an invite email to set their own password via the setup flow. No password validation here.
 
   it('invalid phone format returns 400', async () => {
     const res = await client.api.v1.technicians.$post({

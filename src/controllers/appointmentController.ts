@@ -203,19 +203,20 @@ router.put('/:id', async (c) => {
     return c.json(Errors.APPOINTMENT_UPDATE_ONLY, 403);
   }
 
-  const existing = await AppointmentService.getById(id);
-  if (!existing) return c.json(Errors.NOT_FOUND, 404);
-
-  if (payload.type === 'company' && existing.companyPhone !== (payload.companyPhone ?? payload.phone)) {
-    return c.json(Errors.UNAUTHORIZED, 403);
-  }
-
+  // Validate body first — fail fast without a DB round-trip on bad input
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json(Errors.INVALID_JSON, 400);
 
   const result = appointmentSchema.partial().safeParse(body);
   if (!result.success) {
     return c.json(validationErrorBody(result.error), 400);
+  }
+
+  const existing = await AppointmentService.getById(id);
+  if (!existing) return c.json(Errors.NOT_FOUND, 404);
+
+  if (payload.type === 'company' && existing.companyPhone !== (payload.companyPhone ?? payload.phone)) {
+    return c.json(Errors.UNAUTHORIZED, 403);
   }
 
   const prevTechPhone = existing.technicianPhone;

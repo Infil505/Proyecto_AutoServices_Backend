@@ -95,11 +95,12 @@ describe('POST /technician-coverage-zones — validation (company)', () => {
   });
 });
 
-describe('DELETE /technician-coverage-zones/:technicianPhone/:zoneId — RBAC', () => {
+describe('DELETE /technician-coverage-zones — RBAC', () => {
   it('technician returns 403', async () => {
     const client = testClient(createTestApp('technician')) as any;
-    const res = await client.api.v1['technician-coverage-zones'][':technicianPhone'][':zoneId'].$delete({
-      param: { technicianPhone: '+1234567890', zoneId: '1' },
+    // Route uses query params: DELETE /?technicianPhone=&zoneId=
+    const res = await client.api.v1['technician-coverage-zones'].$delete({
+      query: { technicianPhone: '+1234567890', zoneId: '1' },
     });
     expect(res.status).toBe(403);
   });

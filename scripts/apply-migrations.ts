@@ -37,7 +37,7 @@ try {
   `
 
   // 3. Mark all migrations as applied (skip any already recorded)
-  const now = BigInt(Date.now())
+  const now = Date.now()
   for (const m of migrations) {
     const exists = await sql`
       SELECT 1 FROM drizzle."__drizzle_migrations" WHERE hash = ${m.hash}

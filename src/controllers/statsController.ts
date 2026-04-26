@@ -48,11 +48,11 @@ router.get('/', async (c) => {
     `);
 
     const result = {
-      companies:    Number(row.companies),
-      appointments: Number(row.appointments),
-      technicians:  Number(row.technicians),
-      customers:    Number(row.customers),
-      services:     Number(row.services),
+      companies:    Number(row?.companies    ?? 0),
+      appointments: Number(row?.appointments ?? 0),
+      technicians:  Number(row?.technicians  ?? 0),
+      customers:    Number(row?.customers    ?? 0),
+      services:     Number(row?.services     ?? 0),
     };
     cacheSet(key, result, STATS_TTL_MS);
     return c.json(result);
@@ -81,13 +81,13 @@ router.get('/', async (c) => {
     `);
 
     const result = {
-      appointments:          Number(row.appointments),
-      completedAppointments: Number(row.completed_appointments),
-      technicians:           Number(row.technicians),
-      activeTechnicians:     Number(row.active_technicians),
-      services:              Number(row.services),
-      activeServices:        Number(row.active_services),
-      zones:                 Number(row.zones),
+      appointments:          Number(row?.appointments           ?? 0),
+      completedAppointments: Number(row?.completed_appointments ?? 0),
+      technicians:           Number(row?.technicians            ?? 0),
+      activeTechnicians:     Number(row?.active_technicians     ?? 0),
+      services:              Number(row?.services               ?? 0),
+      activeServices:        Number(row?.active_services        ?? 0),
+      zones:                 Number(row?.zones                  ?? 0),
     };
     cacheSet(key, result, STATS_TTL_MS);
     return c.json(result);
@@ -102,7 +102,7 @@ router.get('/', async (c) => {
     SELECT (SELECT COUNT(*) FROM appointments WHERE technician_phone = ${payload.phone})::int AS appointments
   `);
 
-  const result = { appointments: Number(row.appointments) };
+  const result = { appointments: Number(row?.appointments ?? 0) };
   cacheSet(key, result, STATS_TTL_MS);
   return c.json(result);
 });

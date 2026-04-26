@@ -104,11 +104,12 @@ describe('POST /service-specialties — validation (company)', () => {
   });
 });
 
-describe('DELETE /service-specialties/:serviceId/:specialtyId — RBAC', () => {
+describe('DELETE /service-specialties — RBAC', () => {
   it('technician returns 403', async () => {
     const client = testClient(createTestApp('technician')) as any;
-    const res = await client.api.v1['service-specialties'][':serviceId'][':specialtyId'].$delete({
-      param: { serviceId: '1', specialtyId: '2' },
+    // Route uses query params: DELETE /?serviceId=&specialtyId=
+    const res = await client.api.v1['service-specialties'].$delete({
+      query: { serviceId: '1', specialtyId: '2' },
     });
     expect(res.status).toBe(403);
   });
@@ -142,11 +143,12 @@ describe('POST /technician-specialties — validation (company)', () => {
   });
 });
 
-describe('DELETE /technician-specialties/:technicianPhone/:specialtyId — RBAC', () => {
+describe('DELETE /technician-specialties — RBAC', () => {
   it('technician returns 403', async () => {
     const client = testClient(createTestApp('technician')) as any;
-    const res = await client.api.v1['technician-specialties'][':technicianPhone'][':specialtyId'].$delete({
-      param: { technicianPhone: '+1234567890', specialtyId: '1' },
+    // Route uses query params: DELETE /?technicianPhone=&specialtyId=
+    const res = await client.api.v1['technician-specialties'].$delete({
+      query: { technicianPhone: '+1234567890', specialtyId: '1' },
     });
     expect(res.status).toBe(403);
   });
