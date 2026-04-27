@@ -91,11 +91,12 @@ export const appointments = pgTable('appointments', {
   estatusTecnico: boolean('estatus_tecnico'),
   estatusAdministrador: boolean('estatus_administrador'),
 }, (t) => ({
-  companyPhoneIdx:    index('idx_appointments_company_phone').on(t.companyPhone),
-  technicianPhoneIdx: index('idx_appointments_technician_phone').on(t.technicianPhone),
-  statusIdx:          index('idx_appointments_status').on(t.status),
-  createdAtIdx:       index('idx_appointments_created_at').on(t.createdAt),
-  appointmentDateIdx: index('idx_appointments_appointment_date').on(t.appointmentDate),
+  companyPhoneIdx:       index('idx_appointments_company_phone').on(t.companyPhone),
+  companyStatusIdx:      index('idx_appointments_company_status').on(t.companyPhone, t.status),
+  technicianPhoneIdx:    index('idx_appointments_technician_phone').on(t.technicianPhone),
+  statusIdx:             index('idx_appointments_status').on(t.status),
+  createdAtIdx:          index('idx_appointments_created_at').on(t.createdAt),
+  appointmentDateIdx:    index('idx_appointments_appointment_date').on(t.appointmentDate),
 }));
 
 export const coverageZones = pgTable('coverage_zones', {

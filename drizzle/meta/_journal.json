@@ -43,6 +43,13 @@
       "when": 1776925455087,
       "tag": "0005_bizarre_roughhouse",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777244030267,
+      "tag": "0006_spicy_red_ghost",
+      "breakpoints": true
     }
   ]
 }
